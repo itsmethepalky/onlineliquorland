@@ -1,0 +1,573 @@
+{
+  "connection": [
+    {
+      "database": "postgres",
+      "username": "postgres"
+    }
+  ],
+  "tables": [
+    {
+      "schemaname": "public",
+      "tablename": "brands",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "categories",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "customers",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "order_items",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "orders",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "product_images",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "products",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "profiles",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "purchase_items",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "purchases",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "returns",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "sale_items",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "sales",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "store_promotion_usage",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "store_promotions",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "store_settings",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "public",
+      "tablename": "suppliers",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "storage",
+      "tablename": "buckets",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "storage",
+      "tablename": "buckets_analytics",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "storage",
+      "tablename": "buckets_vectors",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "storage",
+      "tablename": "migrations",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "storage",
+      "tablename": "objects",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "storage",
+      "tablename": "s3_multipart_uploads",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "storage",
+      "tablename": "s3_multipart_uploads_parts",
+      "rowsecurity": true
+    },
+    {
+      "schemaname": "storage",
+      "tablename": "vector_indexes",
+      "rowsecurity": true
+    }
+  ],
+  "policies": [
+    {
+      "schemaname": "public",
+      "tablename": "brands",
+      "policyname": "brands_public_read_active",
+      "roles": [
+        "public"
+      ],
+      "cmd": "SELECT",
+      "qual": "(is_active = true)",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "brands",
+      "policyname": "brands_staff_all",
+      "roles": [
+        "public"
+      ],
+      "cmd": "ALL",
+      "qual": "private.is_staff()",
+      "with_check": "private.is_staff()"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "categories",
+      "policyname": "categories_public_read_active",
+      "roles": [
+        "public"
+      ],
+      "cmd": "SELECT",
+      "qual": "(is_active = true)",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "categories",
+      "policyname": "categories_staff_all",
+      "roles": [
+        "public"
+      ],
+      "cmd": "ALL",
+      "qual": "private.is_staff()",
+      "with_check": "private.is_staff()"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "customers",
+      "policyname": "customers_select_own",
+      "roles": [
+        "public"
+      ],
+      "cmd": "SELECT",
+      "qual": "(user_id = ( SELECT auth.uid() AS uid))",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "customers",
+      "policyname": "customers_staff_all",
+      "roles": [
+        "public"
+      ],
+      "cmd": "ALL",
+      "qual": "private.is_staff()",
+      "with_check": "private.is_staff()"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "order_items",
+      "policyname": "order_items_select_own",
+      "roles": [
+        "public"
+      ],
+      "cmd": "SELECT",
+      "qual": "(EXISTS ( SELECT 1\n   FROM (orders o\n     JOIN customers c ON ((c.id = o.customer_id)))\n  WHERE ((o.id = order_items.order_id) AND (c.user_id = ( SELECT auth.uid() AS uid)))))",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "order_items",
+      "policyname": "order_items_staff_all",
+      "roles": [
+        "public"
+      ],
+      "cmd": "ALL",
+      "qual": "private.is_staff()",
+      "with_check": "private.is_staff()"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "orders",
+      "policyname": "orders_select_own",
+      "roles": [
+        "public"
+      ],
+      "cmd": "SELECT",
+      "qual": "(EXISTS ( SELECT 1\n   FROM customers c\n  WHERE ((c.id = orders.customer_id) AND (c.user_id = ( SELECT auth.uid() AS uid)))))",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "orders",
+      "policyname": "orders_staff_all",
+      "roles": [
+        "public"
+      ],
+      "cmd": "ALL",
+      "qual": "private.is_staff()",
+      "with_check": "private.is_staff()"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "product_images",
+      "policyname": "product_images_staff_all",
+      "roles": [
+        "public"
+      ],
+      "cmd": "ALL",
+      "qual": "private.is_staff()",
+      "with_check": "private.is_staff()"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "products",
+      "policyname": "products_public_read_active",
+      "roles": [
+        "public"
+      ],
+      "cmd": "SELECT",
+      "qual": "(is_active = true)",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "products",
+      "policyname": "products_staff_all",
+      "roles": [
+        "public"
+      ],
+      "cmd": "ALL",
+      "qual": "private.is_staff()",
+      "with_check": "private.is_staff()"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "profiles",
+      "policyname": "profiles_admin_all",
+      "roles": [
+        "public"
+      ],
+      "cmd": "ALL",
+      "qual": "private.is_admin()",
+      "with_check": "private.is_admin()"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "profiles",
+      "policyname": "profiles_select_own_or_staff",
+      "roles": [
+        "public"
+      ],
+      "cmd": "SELECT",
+      "qual": "((( SELECT auth.uid() AS uid) = id) OR private.is_staff())",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "profiles",
+      "policyname": "profiles_update_own_limited",
+      "roles": [
+        "public"
+      ],
+      "cmd": "UPDATE",
+      "qual": "(( SELECT auth.uid() AS uid) = id)",
+      "with_check": "(( SELECT auth.uid() AS uid) = id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "purchase_items",
+      "policyname": "purchase_items_staff_all",
+      "roles": [
+        "public"
+      ],
+      "cmd": "ALL",
+      "qual": "private.is_staff()",
+      "with_check": "private.is_staff()"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "purchases",
+      "policyname": "purchases_staff_all",
+      "roles": [
+        "public"
+      ],
+      "cmd": "ALL",
+      "qual": "private.is_staff()",
+      "with_check": "private.is_staff()"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "returns",
+      "policyname": "returns_select_own",
+      "roles": [
+        "public"
+      ],
+      "cmd": "SELECT",
+      "qual": "(EXISTS ( SELECT 1\n   FROM ((sale_items si\n     JOIN sales s ON ((s.id = si.sale_id)))\n     JOIN customers c ON ((c.id = s.customer_id)))\n  WHERE ((si.id = returns.sale_item_id) AND (c.user_id = ( SELECT auth.uid() AS uid)))))",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "returns",
+      "policyname": "returns_staff_all",
+      "roles": [
+        "public"
+      ],
+      "cmd": "ALL",
+      "qual": "private.is_staff()",
+      "with_check": "private.is_staff()"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "sale_items",
+      "policyname": "sale_items_select_own",
+      "roles": [
+        "public"
+      ],
+      "cmd": "SELECT",
+      "qual": "(EXISTS ( SELECT 1\n   FROM (sales s\n     JOIN customers c ON ((c.id = s.customer_id)))\n  WHERE ((s.id = sale_items.sale_id) AND (c.user_id = ( SELECT auth.uid() AS uid)))))",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "sale_items",
+      "policyname": "sale_items_staff_all",
+      "roles": [
+        "public"
+      ],
+      "cmd": "ALL",
+      "qual": "private.is_staff()",
+      "with_check": "private.is_staff()"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "sales",
+      "policyname": "sales_select_own",
+      "roles": [
+        "public"
+      ],
+      "cmd": "SELECT",
+      "qual": "(EXISTS ( SELECT 1\n   FROM customers c\n  WHERE ((c.id = sales.customer_id) AND (c.user_id = ( SELECT auth.uid() AS uid)))))",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "sales",
+      "policyname": "sales_staff_all",
+      "roles": [
+        "public"
+      ],
+      "cmd": "ALL",
+      "qual": "private.is_staff()",
+      "with_check": "private.is_staff()"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "suppliers",
+      "policyname": "suppliers_staff_all",
+      "roles": [
+        "public"
+      ],
+      "cmd": "ALL",
+      "qual": "private.is_staff()",
+      "with_check": "private.is_staff()"
+    },
+    {
+      "schemaname": "storage",
+      "tablename": "objects",
+      "policyname": "product_images_public_read",
+      "roles": [
+        "public"
+      ],
+      "cmd": "SELECT",
+      "qual": "(bucket_id = 'product-images'::text)",
+      "with_check": null
+    },
+    {
+      "schemaname": "storage",
+      "tablename": "objects",
+      "policyname": "product_images_staff_delete",
+      "roles": [
+        "public"
+      ],
+      "cmd": "DELETE",
+      "qual": "((bucket_id = 'product-images'::text) AND private.is_staff())",
+      "with_check": null
+    },
+    {
+      "schemaname": "storage",
+      "tablename": "objects",
+      "policyname": "product_images_staff_update",
+      "roles": [
+        "public"
+      ],
+      "cmd": "UPDATE",
+      "qual": "((bucket_id = 'product-images'::text) AND private.is_staff())",
+      "with_check": null
+    },
+    {
+      "schemaname": "storage",
+      "tablename": "objects",
+      "policyname": "product_images_staff_write",
+      "roles": [
+        "public"
+      ],
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "((bucket_id = 'product-images'::text) AND private.is_staff())"
+    }
+  ],
+  "functions": [
+    {
+      "schema_name": "public",
+      "function_name": "adjust_store_product_stock",
+      "arguments": "p_product_id bigint, p_adjustment integer"
+    },
+    {
+      "schema_name": "public",
+      "function_name": "cancel_store_order",
+      "arguments": "p_order_id bigint"
+    },
+    {
+      "schema_name": "public",
+      "function_name": "create_store_order",
+      "arguments": "p_customer_id bigint, p_phone text, p_shipping_address text, p_payment_method text, p_notes text, p_items jsonb, p_promo_code text"
+    },
+    {
+      "schema_name": "public",
+      "function_name": "create_store_order_with_delivery",
+      "arguments": "p_customer_id bigint, p_phone text, p_shipping_address text, p_payment_method text, p_notes text, p_items jsonb, p_promo_code text, p_delivery_distance_km numeric"
+    },
+    {
+      "schema_name": "public",
+      "function_name": "create_store_order_with_delivery_location",
+      "arguments": "p_customer_id bigint, p_phone text, p_shipping_address text, p_payment_method text, p_notes text, p_items jsonb, p_promo_code text, p_delivery_distance_km numeric, p_delivery_latitude double precision, p_delivery_longitude double precision"
+    },
+    {
+      "schema_name": "public",
+      "function_name": "preview_store_checkout",
+      "arguments": "p_customer_id bigint, p_phone text, p_shipping_address text, p_payment_method text, p_items jsonb, p_promo_code text"
+    },
+    {
+      "schema_name": "public",
+      "function_name": "preview_store_checkout_with_delivery",
+      "arguments": "p_customer_id bigint, p_phone text, p_shipping_address text, p_payment_method text, p_items jsonb, p_promo_code text, p_delivery_distance_km numeric"
+    },
+    {
+      "schema_name": "public",
+      "function_name": "update_store_customer_phone",
+      "arguments": "p_user_id uuid, p_phone text"
+    },
+    {
+      "schema_name": "public",
+      "function_name": "update_store_order_payment",
+      "arguments": "p_order_id bigint, p_payment_status payment_status, p_amount_paid numeric"
+    },
+    {
+      "schema_name": "public",
+      "function_name": "update_store_order_status",
+      "arguments": "p_order_id bigint, p_new_status order_status"
+    }
+  ],
+  "triggers": [
+    {
+      "schema_name": "public",
+      "table_name": "orders",
+      "trigger_name": "orders_set_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE"
+    },
+    {
+      "schema_name": "storage",
+      "table_name": "buckets",
+      "trigger_name": "enforce_bucket_name_length_trigger",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT"
+    },
+    {
+      "schema_name": "storage",
+      "table_name": "buckets",
+      "trigger_name": "enforce_bucket_name_length_trigger",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE"
+    },
+    {
+      "schema_name": "storage",
+      "table_name": "buckets",
+      "trigger_name": "protect_bucket_control_insert",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT"
+    },
+    {
+      "schema_name": "storage",
+      "table_name": "buckets",
+      "trigger_name": "protect_bucket_control_update",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE"
+    },
+    {
+      "schema_name": "storage",
+      "table_name": "buckets",
+      "trigger_name": "protect_bucket_control_update_role",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE"
+    },
+    {
+      "schema_name": "storage",
+      "table_name": "buckets",
+      "trigger_name": "protect_buckets_delete",
+      "action_timing": "BEFORE",
+      "event_manipulation": "DELETE"
+    },
+    {
+      "schema_name": "storage",
+      "table_name": "objects",
+      "trigger_name": "protect_objects_delete",
+      "action_timing": "BEFORE",
+      "event_manipulation": "DELETE"
+    },
+    {
+      "schema_name": "storage",
+      "table_name": "objects",
+      "trigger_name": "update_objects_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE"
+    }
+  ]
+}
