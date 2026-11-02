@@ -14,7 +14,8 @@ jobs:
     steps:
       - name: Check deployed service health
         run: |
-          response="$(curl --fail --silent --show-error --retry 2 --max-time 30 \
-            https://thebluemoonstore.onrender.com/api/health)"
+          response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors \
+            --retry-delay 10 --max-time 90 \
+            https://online-liquor-land.onrender.com/api/health)"
           echo "$response" | jq --exit-status '.status == "ok"' > /dev/null
-          echo "The Blue Moon Store health check passed."
+          echo "ONLINE LIQUOR LAND health check passed."

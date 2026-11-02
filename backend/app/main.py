@@ -3,11 +3,12 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .auth import get_current_customer, get_current_user
+from .config import settings
 from .routers import admin, catalog, checkout
 from .supabase import supabase_admin
 from .supabase_retry import execute_read_with_retry
@@ -31,6 +32,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://thebluemoonstore.onrender.com",
+        "https://online-liquor-land.onrender.com",
         "http://127.0.0.1:8001",
         "http://localhost:8001",
     ],
@@ -69,6 +71,49 @@ def health():
         "status": "ok",
         "service": "Online Liquor Land API",
     }
+
+
+@app.get("/api/public/contact")
+def public_contact():
+    return {
+        "business_name": "ONLINE LIQUOR LAND",
+        "email": settings.STORE_PUBLIC_EMAIL.strip(),
+        "phone": settings.STORE_CONTACT_PHONE.strip(),
+    }
+
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+def robots_txt():
+    return (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /api/\n"
+        f"Sitemap: {settings.SEO_SITE_URL}/sitemap.xml\n"
+    )
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml():
+    paths = (
+        "/",
+        "/shop",
+        "/about",
+        "/contact",
+        "/privacy-policy",
+        "/terms-and-conditions",
+    )
+    urls = "".join(
+        f"<url><loc>{settings.SEO_SITE_URL}{path}</loc></url>"
+        for path in paths
+    )
+    return Response(
+        content=(
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            f"{urls}</urlset>"
+        ),
+        media_type="application/xml",
+    )
 
 
 @app.get("/api/auth/me")
@@ -354,6 +399,26 @@ def admin_page():
 @app.get("/shop", include_in_schema=False)
 def frontend_shop():
     return serve_page("shop.html")
+
+
+@app.get("/about", include_in_schema=False)
+def frontend_about():
+    return serve_page("about.html")
+
+
+@app.get("/contact", include_in_schema=False)
+def frontend_contact():
+    return serve_page("contact.html")
+
+
+@app.get("/privacy-policy", include_in_schema=False)
+def frontend_privacy_policy():
+    return serve_page("privacy-policy.html")
+
+
+@app.get("/terms-and-conditions", include_in_schema=False)
+def frontend_terms_and_conditions():
+    return serve_page("terms-and-conditions.html")
 
 
 @app.get("/product", include_in_schema=False)

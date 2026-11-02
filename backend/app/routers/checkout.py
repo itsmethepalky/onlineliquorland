@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import os
 import secrets
 import threading
@@ -12,13 +13,14 @@ from decimal import Decimal, InvalidOperation
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from ..auth import get_current_customer
 from ..config import settings
 from ..supabase import supabase_admin
+from ..whatsapp_notifications import notify_admin_new_fonepay_order
 
 
 router = APIRouter(
@@ -34,10 +36,12 @@ FONEPAY_VERIFY_URL = settings.FONEPAY_VERIFY_URL
 FONEPAY_MIN_INITIAL_PAYMENT = Decimal(
     settings.MINIMUM_INITIAL_PAYMENT or "300"
 )
+MAX_DELIVERY_DISTANCE_KM = Decimal("9")
+EARTH_RADIUS_KM = 6371.0088
 
 STORE_PUBLIC_URL = os.getenv(
     "STORE_PUBLIC_URL",
-    "http://127.0.0.1:8001",
+    "https://online-liquor-land.onrender.com",
 ).rstrip("/")
 NOMINATIM_MIN_INTERVAL_SECONDS = 1.0
 _nominatim_lock = threading.Lock()
@@ -115,7 +119,7 @@ def _nominatim_request(path: str, params: dict) -> httpx.Response:
         headers = {
             "User-Agent": (
                 "TheBlueMoonStore/1.0 "
-                "(https://thebluemoonstore.onrender.com"
+                "(https://online-liquor-land.onrender.com"
                 + (
                     f"; contact: {settings.STORE_CONTACT_EMAIL}"
                     if settings.STORE_CONTACT_EMAIL
@@ -235,10 +239,42 @@ def _calculate_delivery_distance_km(
 def _delivery_rpc_arguments(
     payload: CheckoutRequest,
 ) -> dict:
+    origin_latitude, origin_longitude = _store_origin()
+    latitude_delta = math.radians(
+        payload.delivery_latitude - origin_latitude
+    )
+    longitude_delta = math.radians(
+        payload.delivery_longitude - origin_longitude
+    )
+    origin_latitude_radians = math.radians(origin_latitude)
+    destination_latitude_radians = math.radians(
+        payload.delivery_latitude
+    )
+    haversine = (
+        math.sin(latitude_delta / 2) ** 2
+        + math.cos(origin_latitude_radians)
+        * math.cos(destination_latitude_radians)
+        * math.sin(longitude_delta / 2) ** 2
+    )
+    radius_distance_km = (
+        EARTH_RADIUS_KM
+        * 2
+        * math.asin(math.sqrt(min(1.0, haversine)))
+    )
+    if radius_distance_km > float(MAX_DELIVERY_DISTANCE_KM):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "This delivery address is outside our service area. "
+                "We deliver within a 9 km radius of the store."
+            ),
+        )
+
     distance_km = _calculate_delivery_distance_km(
         payload.delivery_latitude,
         payload.delivery_longitude,
     )
+
     return {
         "p_delivery_distance_km": str(distance_km),
         "distance_km": distance_km,
@@ -980,6 +1016,7 @@ def create_checkout_order(
     response_class=HTMLResponse,
 )
 def fonepay_success(
+    background_tasks: BackgroundTasks,
     transaction_id: str | None = None,
     amount: str | None = None,
 ):
@@ -1066,6 +1103,11 @@ def fonepay_success(
         )
 
     order = finalized.data[0]
+    background_tasks.add_task(
+        notify_admin_new_fonepay_order,
+        transaction_id,
+        int(order["order_id"]),
+    )
     remaining_balance = Decimal(str(order["remaining_balance"]))
 
     return HTMLResponse(

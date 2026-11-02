@@ -14,10 +14,11 @@ with separate frontends and backends while sharing the same Supabase data.
 ## Render availability check
 
 The GitHub Actions workflow at `.github/workflows/keep-render-awake.yml`
-requests the deployed `/api/health` endpoint every 10 minutes to reduce
-Render's free-instance idle spin-down. GitHub Actions scheduling can be
-delayed or paused, so this is not an uptime guarantee. For guaranteed
-always-on service, use a Render plan without idle spin-down.
+requests the deployed `/api/health` endpoint every 10 minutes and retries
+transient failures, including a cold start. This can reduce idle spin-down on
+Render's free instance, but GitHub Actions schedules can be delayed or paused
+and cannot guarantee that a free instance never sleeps. For guaranteed
+always-on service, use a Render plan with always-on instances.
 
 ## Route-based checkout delivery
 
@@ -64,6 +65,7 @@ then apply these checkout migrations in this order:
 9. `database/migrations/019_fonepay_verified_order_creation.sql`
 10. `database/migrations/020_allow_fonepay_checkout_pricing.sql`
 11. `database/migrations/021_product_image_storage_bucket.sql`
+12. `database/migrations/022_fonepay_whatsapp_order_notifications.sql`
 
 The checkout migrations define the seven-argument checkout function; the
 server-side promotions migration also drops the obsolete six-argument version.
@@ -108,7 +110,47 @@ route-priced checkout and preview functions created by migration 015 so they
 accept the Fonepay payment method; apply it after 019 on existing databases.
 Migration 021 creates the public-read `product-images` Storage bucket with
 staff-only write policies; apply it when product image uploads use Supabase
-Storage.
+Storage. Migration 022 installs service-role-only notification claims so
+duplicate Fonepay callbacks do not send duplicate WhatsApp order alerts.
+
+## Admin WhatsApp order notifications
+
+After Fonepay verifies payment and the order is finalized, the backend can
+send the admin a WhatsApp Cloud API message with customer contact/address,
+Google Maps coordinates, ordered products and quantities, total, paid amount,
+and remaining balance. Full payments are labeled `PAID`; deposits are labeled
+`PARTIALLY PAID`. Notification delivery is best-effort: a WhatsApp/API failure
+is logged and does not undo a verified payment or finalized order. The
+notification claim is released after failures and leased for five minutes to
+avoid duplicates from concurrent or retried payment callbacks.
+
+Apply migration 022, then configure `WHATSAPP_CLOUD_API_TOKEN`,
+`WHATSAPP_PHONE_NUMBER_ID`, and `WHATSAPP_ADMIN_PHONE` in the backend
+environment. Keep the token secret; never put it in frontend code or commit it.
+The recipient must have opted in. Free-form text messages require an open
+WhatsApp customer-service window with the business. To notify outside that
+window, create an approved Meta template with one body text parameter and set
+`WHATSAPP_TEMPLATE_NAME` and `WHATSAPP_TEMPLATE_LANGUAGE`; the order details
+are sent as that parameter in messages kept below the template parameter size
+limit.
+
+## Customer information pages and SEO
+
+The public storefront includes About Us, Contact Us, Privacy Policy, and Terms
+and Conditions pages. Set `STORE_PUBLIC_EMAIL` and/or `STORE_CONTACT_PHONE` in
+the backend environment to control the public contact details. `STORE_CONTACT_EMAIL`
+is used for geocoding requests and is not published as a customer contact address.
+Set `SEO_SITE_URL` to the canonical production origin; it is used by
+`/robots.txt` and `/sitemap.xml`. The HTML canonical and structured-data URLs
+currently use `https://online-liquor-land.onrender.com`; update those URLs if
+the store moves to a different public domain.
+
+The storefront includes page metadata, social sharing tags, structured data,
+and a sitemap for its main public pages. Search engines control their own
+crawling and ranking, so no implementation can guarantee a particular SEO
+score or ranking. Review the Privacy Policy and Terms and Conditions against
+the store's actual practices and applicable local law before relying on them
+as legal documents.
 
 The public OSM-hosted Nominatim, tile, and OSRM services have usage policies,
 rate limits, and no production availability guarantee. The application limits
@@ -116,6 +158,11 @@ Nominatim requests to one per second per backend process and searches only when
 the customer submits a query. For production traffic, configure reliable
 OSM-compatible hosted services or self-host them, and review their attribution
 and usage requirements.
+
+Checkout accepts delivery addresses within a 9 km straight-line radius of the
+configured store origin. Delivery pricing still uses the shortest driving
+route. The backend enforces the radius during both price preview and payment
+preparation; the browser cannot bypass the limit.
 
 ## Staff order access
 

@@ -28,6 +28,22 @@ class Settings:
         "STORE_CONTACT_EMAIL",
         "",
     )
+    STORE_PUBLIC_EMAIL: str = os.getenv(
+        "STORE_PUBLIC_EMAIL",
+        "",
+    )
+    STORE_CONTACT_PHONE: str = os.getenv(
+        "STORE_CONTACT_PHONE",
+        "",
+    )
+    STORE_PUBLIC_URL: str = os.getenv(
+        "STORE_PUBLIC_URL",
+        "https://online-liquor-land.onrender.com",
+    ).rstrip("/")
+    SEO_SITE_URL: str = os.getenv(
+        "SEO_SITE_URL",
+        "https://online-liquor-land.onrender.com",
+    ).rstrip("/")
     STORE_ORIGIN_LATITUDE: str = os.getenv(
         "STORE_ORIGIN_LATITUDE",
         "",
@@ -55,6 +71,30 @@ class Settings:
     MINIMUM_INITIAL_PAYMENT: str = os.getenv(
         "MINIMUM_INITIAL_PAYMENT",
         "300",
+    )
+    WHATSAPP_CLOUD_API_TOKEN: str = os.getenv(
+        "WHATSAPP_CLOUD_API_TOKEN",
+        "",
+    )
+    WHATSAPP_PHONE_NUMBER_ID: str = os.getenv(
+        "WHATSAPP_PHONE_NUMBER_ID",
+        "",
+    )
+    WHATSAPP_ADMIN_PHONE: str = os.getenv(
+        "WHATSAPP_ADMIN_PHONE",
+        "+9779851144738",
+    )
+    WHATSAPP_TEMPLATE_NAME: str = os.getenv(
+        "WHATSAPP_TEMPLATE_NAME",
+        "",
+    )
+    WHATSAPP_TEMPLATE_LANGUAGE: str = os.getenv(
+        "WHATSAPP_TEMPLATE_LANGUAGE",
+        "en",
+    )
+    WHATSAPP_GRAPH_API_VERSION: str = os.getenv(
+        "WHATSAPP_GRAPH_API_VERSION",
+        "v22.0",
     )
 
     def validate(self):
