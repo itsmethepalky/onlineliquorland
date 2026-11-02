@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from datetime import datetime, timezone
 from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -39,6 +40,11 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept", "Cache-Control"],
 )
+app.add_middleware(
+    GZipMiddleware,
+    minimum_size=1000,
+    compresslevel=5,
+)
 
 
 @app.middleware("http")
@@ -55,6 +61,17 @@ async def security_headers(request, call_next):
 
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
+    elif Path(request.url.path).suffix.lower() in {
+        ".css",
+        ".ico",
+        ".js",
+        ".svg",
+        ".woff",
+        ".woff2",
+    }:
+        response.headers["Cache-Control"] = (
+            "public, max-age=300, stale-while-revalidate=3600"
+        )
 
     return response
 
