@@ -66,6 +66,7 @@ then apply these checkout migrations in this order:
 10. `database/migrations/020_allow_fonepay_checkout_pricing.sql`
 11. `database/migrations/021_product_image_storage_bucket.sql`
 12. `database/migrations/022_fonepay_whatsapp_order_notifications.sql`
+13. `database/migrations/023_whatsapp_webhook_events.sql`
 
 The checkout migrations define the seven-argument checkout function; the
 server-side promotions migration also drops the obsolete six-argument version.
@@ -134,6 +135,44 @@ window, create an approved Meta template with one body text parameter and set
 are sent as that parameter in messages kept below the template parameter size
 limit.
 
+## WhatsApp Cloud API webhooks
+
+The backend exposes a single WhatsApp Cloud API callback:
+`https://onlineliquorland.com/api/webhooks/whatsapp`. Meta verifies it using
+`GET` query parameters `hub.mode`, `hub.verify_token`, and `hub.challenge`.
+Webhook `POST` requests must include a valid `X-Hub-Signature-256` HMAC made
+with the Meta app secret. Incoming messages and message status changes
+(including sent, delivered, read, and failed) are normalized and stored in
+`whatsapp_webhook_events`. Event keys are unique, so retried deliveries do not
+create duplicate rows. Payloads are limited in size, and the event table is
+restricted to the backend service role by RLS and SQL grants.
+
+On an existing Supabase database, apply
+`database/migrations/023_whatsapp_webhook_events.sql` before deploying the
+webhook code. Configure these values in the Render backend environment, never
+in frontend code or Git:
+
+- `WHATSAPP_APP_SECRET`: App Secret from Meta App settings. Used only to verify
+  signed webhook POSTs.
+- `WHATSAPP_WEBHOOK_VERIFY_TOKEN`: a separate long random string you choose and
+  enter in both Render and the Meta Webhooks setup. It is not the Cloud API
+  access token.
+- `WHATSAPP_PHONE_NUMBER_ID`: the phone number ID already used for outbound
+  notifications. Required for inbound webhooks; events for other IDs are ignored.
+- `WHATSAPP_BUSINESS_ACCOUNT_ID`: the WABA ID from WhatsApp Manager. Required
+  to restrict accepted events to this business account.
+- `WHATSAPP_CLOUD_API_TOKEN`: needed for existing outbound order alerts only;
+  it is not used to authenticate webhook requests.
+
+In Meta Developers, select the WhatsApp product, configure the callback URL
+above and the exact `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, then subscribe the app to
+the `messages` webhook field. The production URL must be publicly reachable
+over HTTPS. After changing Render environment variables, redeploy/restart the
+backend. GET verification returns 503 until the verify token is configured;
+POST delivery returns 503 until the app secret, phone number ID, and business
+account ID are configured. The callback currently returns 404 on the live site
+until this backend change is deployed.
+
 ## Customer information pages and SEO
 
 The public storefront includes About Us, Contact Us, Privacy Policy, and Terms
@@ -142,7 +181,7 @@ the backend environment to control the public contact details. `STORE_CONTACT_EM
 is used for geocoding requests and is not published as a customer contact address.
 Set `SEO_SITE_URL` to the canonical production origin; it is used by
 `/robots.txt` and `/sitemap.xml`. The HTML canonical and structured-data URLs
-currently use `https://online-liquor-land.onrender.com`; update those URLs if
+currently use `https://onlineliquorland.com`; update those URLs if
 the store moves to a different public domain.
 
 The storefront includes page metadata, social sharing tags, structured data,

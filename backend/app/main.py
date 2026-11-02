@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from .auth import get_current_customer, get_current_user
 from .config import settings
-from .routers import admin, catalog, checkout
+from .routers import admin, catalog, checkout, whatsapp_webhook
 from .supabase import supabase_admin
 from .supabase_retry import execute_read_with_retry
 
@@ -31,8 +31,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://thebluemoonstore.onrender.com",
-        "https://online-liquor-land.onrender.com",
+        "https://onlineliquorland.com",
         "http://127.0.0.1:8001",
         "http://localhost:8001",
     ],
@@ -63,6 +62,7 @@ async def security_headers(request, call_next):
 app.include_router(catalog.router)
 app.include_router(checkout.router)
 app.include_router(admin.router)
+app.include_router(whatsapp_webhook.router)
 
 
 @app.get("/api/health")

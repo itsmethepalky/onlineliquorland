@@ -38,11 +38,11 @@ class Settings:
     )
     STORE_PUBLIC_URL: str = os.getenv(
         "STORE_PUBLIC_URL",
-        "https://online-liquor-land.onrender.com",
+        "https://onlineliquorland.com",
     ).rstrip("/")
     SEO_SITE_URL: str = os.getenv(
         "SEO_SITE_URL",
-        "https://online-liquor-land.onrender.com",
+        "https://onlineliquorland.com",
     ).rstrip("/")
     STORE_ORIGIN_LATITUDE: str = os.getenv(
         "STORE_ORIGIN_LATITUDE",
@@ -78,6 +78,18 @@ class Settings:
     )
     WHATSAPP_PHONE_NUMBER_ID: str = os.getenv(
         "WHATSAPP_PHONE_NUMBER_ID",
+        "",
+    )
+    WHATSAPP_BUSINESS_ACCOUNT_ID: str = os.getenv(
+        "WHATSAPP_BUSINESS_ACCOUNT_ID",
+        "",
+    )
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = os.getenv(
+        "WHATSAPP_WEBHOOK_VERIFY_TOKEN",
+        "",
+    )
+    WHATSAPP_APP_SECRET: str = os.getenv(
+        "WHATSAPP_APP_SECRET",
         "",
     )
     WHATSAPP_ADMIN_PHONE: str = os.getenv(

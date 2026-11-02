@@ -16,6 +16,6 @@ jobs:
         run: |
           response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors \
             --retry-delay 10 --max-time 90 \
-            https://online-liquor-land.onrender.com/api/health)"
+            https://onlineliquorland.com/api/health)"
           echo "$response" | jq --exit-status '.status == "ok"' > /dev/null
           echo "ONLINE LIQUOR LAND health check passed."

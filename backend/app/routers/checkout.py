@@ -41,7 +41,7 @@ EARTH_RADIUS_KM = 6371.0088
 
 STORE_PUBLIC_URL = os.getenv(
     "STORE_PUBLIC_URL",
-    "https://online-liquor-land.onrender.com",
+    "https://onlineliquorland.com",
 ).rstrip("/")
 NOMINATIM_MIN_INTERVAL_SECONDS = 1.0
 _nominatim_lock = threading.Lock()
@@ -119,7 +119,7 @@ def _nominatim_request(path: str, params: dict) -> httpx.Response:
         headers = {
             "User-Agent": (
                 "TheBlueMoonStore/1.0 "
-                "(https://online-liquor-land.onrender.com"
+                "(https://onlineliquorland.com"
                 + (
                     f"; contact: {settings.STORE_CONTACT_EMAIL}"
                     if settings.STORE_CONTACT_EMAIL
