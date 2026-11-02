@@ -3,8 +3,6 @@ import hashlib
 import hmac
 import json
 import math
-import os
-import secrets
 import threading
 import time
 import urllib.parse
@@ -31,7 +29,6 @@ router = APIRouter(
 
 FONEPAY_MERCHANT_ID = settings.FONEPAY_MERCHANT_ID
 FONEPAY_MERCHANT_SECRET = settings.FONEPAY_MERCHANT_SECRET
-FONEPAY_FORM_URL = settings.FONEPAY_FORM_URL
 FONEPAY_VERIFY_URL = settings.FONEPAY_VERIFY_URL
 FONEPAY_MIN_INITIAL_PAYMENT = Decimal(
     settings.MINIMUM_INITIAL_PAYMENT or "300"
@@ -39,10 +36,6 @@ FONEPAY_MIN_INITIAL_PAYMENT = Decimal(
 MAX_DELIVERY_DISTANCE_KM = Decimal("9")
 EARTH_RADIUS_KM = 6371.0088
 
-STORE_PUBLIC_URL = os.getenv(
-    "STORE_PUBLIC_URL",
-    "https://onlineliquorland.com",
-).rstrip("/")
 NOMINATIM_MIN_INTERVAL_SECONDS = 1.0
 _nominatim_lock = threading.Lock()
 _last_nominatim_request = 0.0
@@ -777,7 +770,15 @@ def create_checkout_order(
             detail="Only Fonepay payments are supported.",
         )
 
-    if not FONEPAY_MERCHANT_ID or not FONEPAY_MERCHANT_SECRET:
+    if not all(
+        value.strip()
+        for value in (
+            settings.FONEPAY_MERCHANT_CODE,
+            FONEPAY_MERCHANT_SECRET,
+            settings.FONEPAY_USERNAME,
+            settings.FONEPAY_PASSWORD,
+        )
+    ):
         raise HTTPException(
             status_code=503,
             detail="Fonepay payment is not configured.",
@@ -918,96 +919,109 @@ def create_checkout_order(
                 status_code=400,
                 detail="The initial payment cannot exceed the total order amount.",
                 )
-        amount_to_pay = requested_amount
-        payment_type = "partial"
+        requested_amount_to_pay = requested_amount
     else:
-        amount_to_pay = total_amount
-        payment_type = "full"
-
-    transaction_id = f"FONEPAY-{secrets.token_hex(16)}"
-    amount_string = _format_decimal(amount_to_pay)
-    signature = _fonepay_signature(
-        {
-            "merchant_id": FONEPAY_MERCHANT_ID,
-            "amount": amount_string,
-            "transaction_id": transaction_id,
-            "order_id": transaction_id,
-            "payment_type": payment_type,
-        }
-    )
-
-    checkout_data = {
-        "customer_id": customer["id"],
-        "phone": payload.phone.strip(),
-        "shipping_address": payload.shipping_address.strip(),
-        "notes": payload.notes.strip() if payload.notes else None,
-        "items": items,
-        "promo_code": promo_code,
-        "expected_total_amount": _format_decimal(total_amount),
-        "delivery_distance_km": delivery["p_delivery_distance_km"],
-        "delivery_latitude": payload.delivery_latitude,
-        "delivery_longitude": payload.delivery_longitude,
-    }
+        requested_amount_to_pay = total_amount
 
     try:
-        supabase_admin.table("fonepay_checkout_intents").insert(
+        order_response = supabase_admin.rpc(
+            "create_store_order_with_delivery_location",
             {
-                "transaction_id": transaction_id,
-                "customer_id": customer["id"],
-                "checkout_data": checkout_data,
-                "amount_to_pay": amount_string,
-            }
+                "p_customer_id": customer["id"],
+                "p_phone": payload.phone.strip(),
+                "p_shipping_address": payload.shipping_address.strip(),
+                "p_payment_method": "fonepay",
+                "p_notes": payload.notes.strip() if payload.notes else None,
+                "p_items": items,
+                "p_promo_code": promo_code,
+                "p_delivery_distance_km": delivery[
+                    "p_delivery_distance_km"
+                ],
+                "p_delivery_latitude": payload.delivery_latitude,
+                "p_delivery_longitude": payload.delivery_longitude,
+            },
         ).execute()
     except Exception as exc:
         print(
-            "FONEPAY CHECKOUT INTENT CREATE ERROR:",
+            "FONEPAY PENDING ORDER CREATE ERROR:",
             repr(exc),
             flush=True,
         )
 
-        if _verified_checkout_migration_missing(exc):
+        error_text = str(exc).lower()
+        if "insufficient stock" in error_text:
+            detail = "One or more products do not have enough stock."
+            status_code = 409
+        elif "no longer available" in error_text:
+            detail = "One or more products are no longer available."
+            status_code = 409
+        elif "promo code" in error_text:
+            detail = "The promotion is no longer available. Review your cart and try again."
+            status_code = 409
+        elif (
+            "pgrst202" in error_text
+            and "create_store_order_with_delivery_location" in error_text
+        ):
             detail = (
-                "Verified-payment order creation is not installed. "
-                "Apply database migration 019_fonepay_verified_order_creation.sql."
+                "The delivery-location order function is not installed. "
+                "Apply database migration 016 in Supabase."
             )
+            status_code = 503
+        elif (
+            "fonepay" in error_text
+            and (
+                "payment_method" in error_text
+                or "payment method" in error_text
+            )
+        ):
+            detail = (
+                "Fonepay checkout is not enabled in the database. "
+                "Apply database migration 020 in Supabase."
+            )
+            status_code = 503
         else:
-            detail = (
-                "Unable to save checkout for verified payment. "
-                "No order has been created; please retry."
-            )
+            detail = "Unable to create your pending order."
+            status_code = 503
 
         raise HTTPException(
-            status_code=503,
+            status_code=status_code,
             detail=detail,
         ) from exc
+
+    if not order_response.data:
+        raise HTTPException(
+            status_code=500,
+            detail="Order creation returned no order.",
+        )
+
+    created_order = order_response.data[0]
+    actual_total = Decimal(str(created_order["total_amount"]))
+    amount_to_pay = min(requested_amount_to_pay, actual_total)
+    payment_type = (
+        "partial"
+        if amount_to_pay < actual_total
+        else "full"
+    )
 
     return {
         "success": True,
         "payment_required": True,
         "payment_gateway": "fonepay",
+        "order_id": created_order["order_id"],
+        "order_no": created_order["order_no"],
         "order": {
-            "subtotal": result["subtotal"],
-            "discount": result["discount"],
-            "delivery_charge": result["delivery_charge"],
-            "promo_code": result.get("promo_code"),
+            "subtotal": created_order["subtotal"],
+            "discount": created_order["discount"],
+            "delivery_charge": created_order["delivery_charge"],
+            "promo_code": created_order.get("promo_code"),
             "delivery_distance_km": str(delivery["distance_km"]),
-            "total_amount": result["total_amount"],
-            "amount_paid": amount_to_pay,
-            "remaining_balance": total_amount - amount_to_pay,
+            "total_amount": actual_total,
+            "amount_paid": Decimal("0.00"),
+            "remaining_balance": actual_total,
             "payment_type": payment_type,
+            "initial_payment_amount": amount_to_pay,
         },
-        "fonepay": {
-            "form_url": FONEPAY_FORM_URL,
-            "merchant_id": FONEPAY_MERCHANT_ID,
-            "amount": amount_string,
-            "currency": "NPR",
-            "transaction_id": transaction_id,
-            "order_id": transaction_id,
-            "payment_type": payment_type,
-            "success_url": f"{STORE_PUBLIC_URL}/api/checkout/fonepay/success",
-            "failure_url": f"{STORE_PUBLIC_URL}/api/checkout/fonepay/failure",
-            "signature": signature,
-        },
+        "amount_to_pay": _format_decimal(amount_to_pay),
     }
 
 

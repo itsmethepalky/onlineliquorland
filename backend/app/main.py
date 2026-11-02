@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from .auth import get_current_customer, get_current_user
 from .config import settings
-from .routers import admin, catalog, checkout, whatsapp_webhook
+from .routers import admin, catalog, checkout, fonepay, whatsapp_webhook
 from .supabase import supabase_admin
 from .supabase_retry import execute_read_with_retry
 
@@ -61,6 +61,7 @@ async def security_headers(request, call_next):
 
 app.include_router(catalog.router)
 app.include_router(checkout.router)
+app.include_router(fonepay.router)
 app.include_router(admin.router)
 app.include_router(whatsapp_webhook.router)
 
@@ -248,6 +249,7 @@ def account_orders(
                 discount,
                 tax,
                 total_amount,
+                amount_paid,
                 payment_method,
                 payment_status,
                 shipping_address,

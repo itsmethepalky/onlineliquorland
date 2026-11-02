@@ -20,6 +20,17 @@ Render's free instance, but GitHub Actions schedules can be delayed or paused
 and cannot guarantee that a free instance never sleeps. For guaranteed
 always-on service, use a Render plan with always-on instances.
 
+## Local store development
+
+Run the store backend from the `backend` directory with
+`python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000`, then
+open `http://127.0.0.1:8000/checkout`. The storefront uses same-origin API
+requests; do not serve it from a separate static server or the POS API port
+8001. Local Fonepay checkout uses the UAT base URL by default but still
+requires Fonepay UAT merchant code, shared secret, API username, and API
+password in `backend/.env`. Without all four values, checkout intentionally
+stops before creating an order; it does not simulate or mark a payment as paid.
+
 ## Route-based checkout delivery
 
 Checkout uses Leaflet with OpenStreetMap tiles for map pin selection. Address
@@ -67,6 +78,7 @@ then apply these checkout migrations in this order:
 11. `database/migrations/021_product_image_storage_bucket.sql`
 12. `database/migrations/022_fonepay_whatsapp_order_notifications.sql`
 13. `database/migrations/023_whatsapp_webhook_events.sql`
+14. `database/migrations/024_fonepay_dynamic_qr.sql`
 
 The checkout migrations define the seven-argument checkout function; the
 server-side promotions migration also drops the obsolete six-argument version.
@@ -103,12 +115,10 @@ silently replaced. The admin delivery setting is the base fare; the
 per-kilometer rate is fixed at NPR 50. The admin order detail page provides an
 "Open in Google Maps" link using the saved coordinates.
 
-Migration 019 stores a server-side Fonepay checkout intent, then creates the
-order and records the verified payment together in one database transaction.
-Failed or abandoned payments do not create orders. Apply it after migration
-018 before deploying the matching checkout backend. Migration 020 updates the
-route-priced checkout and preview functions created by migration 015 so they
-accept the Fonepay payment method; apply it after 019 on existing databases.
+Migration 019 supports the legacy hosted Fonepay checkout. Migration 020
+updates the route-priced checkout and preview functions created by migration
+015 so they accept the Fonepay payment method; apply it after 019 on existing
+databases.
 Migration 021 creates the public-read `product-images` Storage bucket with
 staff-only write policies; apply it when product image uploads use Supabase
 Storage. Migration 022 installs service-role-only notification claims so
@@ -116,8 +126,8 @@ duplicate Fonepay callbacks do not send duplicate WhatsApp order alerts.
 
 ## Admin WhatsApp order notifications
 
-After Fonepay verifies payment and the order is finalized, the backend can
-send the admin a WhatsApp Cloud API message with customer contact/address,
+After Fonepay verifies payment for a pending order, the backend can send the
+admin a WhatsApp Cloud API message with customer contact/address,
 Google Maps coordinates, ordered products and quantities, total, paid amount,
 and remaining balance. Full payments are labeled `PAID`; deposits are labeled
 `PARTIALLY PAID`. Notification delivery is best-effort: a WhatsApp/API failure
@@ -134,6 +144,57 @@ window, create an approved Meta template with one body text parameter and set
 `WHATSAPP_TEMPLATE_NAME` and `WHATSAPP_TEMPLATE_LANGUAGE`; the order details
 are sent as that parameter in messages kept below the template parameter size
 limit.
+
+## Auth-page Cloudflare Turnstile
+
+Login, account registration, and password-reset requests use Cloudflare
+Turnstile and pass its token to Supabase Auth. In Cloudflare, make sure the
+Turnstile site key allows `onlineliquorland.com` and the hostname used during
+local testing (`127.0.0.1` or `localhost`). In Supabase Dashboard, enable
+Captcha protection for Auth with the Turnstile provider and configure the
+matching Turnstile secret key. The site key in the HTML is public; never put
+the secret key in frontend code. Error `110200` means the hostname is not
+authorized, while `300*` and `600*` indicate a generic challenge failure that
+can be caused by bot detection, browser extensions, VPNs, proxies, or network
+filtering. Automated browser testing may also trigger bot detection.
+
+## Fonepay Dynamic QR checkout
+
+Checkout creates a pending Fonepay order, requests a Dynamic QR from the
+backend, and displays the returned QR image. The backend signs provider
+requests with HMAC-SHA512, verifies signed callbacks, and queries Fonepay's
+transaction-verification endpoint before changing the order payment status.
+Authenticated customers can retry or manually verify payment from their orders
+page. Merchant credentials are never sent to the browser.
+
+Apply `database/migrations/024_fonepay_dynamic_qr.sql` after migrations 001–023
+before deploying the Dynamic QR checkout. Configure these backend environment
+variables:
+
+- `FONEPAY_MERCHANT_CODE`, `FONEPAY_MERCHANT_SECRET`, `FONEPAY_USERNAME`, and
+  `FONEPAY_PASSWORD`: merchant credentials from Fonepay.
+- `FONEPAY_API_BASE_URL`: use
+  `https://dev-merchantapi.fonepay.com/convergentmerchantweb/api` for UAT, or
+  `https://merchantapi.fonepay.com/api` for production.
+- `FONEPAY_QR_GENERATE_PATH` defaults to
+  `/merchant/merchantDetailsForThirdParty/thirdPartyDynamicQrDownload`.
+- `FONEPAY_QR_VERIFY_PATH` defaults to
+  `/merchant/merchantDetailsForThirdParty/txnVerification`.
+
+Register `https://onlineliquorland.com/api/payments/fonepay-callback` as the
+callback URL in Fonepay's merchant configuration. The QR
+generation request signature is HMAC-SHA512 of
+`amount,prn,merchantCode,remarks1,remarks2`; the status request signs
+`prn,merchantCode`; and the callback signature is checked against
+`prn,amount,bid,uid,status,msg,merchantCode`. The HMAC is sent as the
+`dataValidation` field. Keep the shared secret, username, and password in
+Render's backend environment only.
+
+The `fonepay_qr_payments` table prevents duplicate application of a callback
+and allows only one pending QR attempt per order. A successful provider status
+check is required before payment is recorded. Failed or abandoned pending
+orders reserve stock under the existing order workflow; cancel them through
+the normal order cancellation flow if they will not be paid.
 
 ## WhatsApp Cloud API webhooks
 

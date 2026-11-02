@@ -75,6 +75,8 @@
 
 </main>
 
+<script src="/js/fonepay-qr.js"></script>
+
 <script>
 const API_BASE = "";
 
@@ -128,6 +130,15 @@ function renderOrders(orders) {
       (total, item) => total + Number(item.quantity || 0),
       0
     );
+    const remaining = Math.max(
+      Number(order.total_amount || 0) - Number(order.amount_paid || 0),
+      0
+    );
+    const canPay =
+      order.payment_method === "fonepay" &&
+      order.payment_status !== "paid" &&
+      order.status !== "cancelled" &&
+      remaining > 0;
 
     return `
       <article class="account-card order-card">
@@ -162,9 +173,22 @@ function renderOrders(orders) {
             <span>Total</span>
             <strong>${formatMoney(order.total_amount)}</strong>
           </div>
+          <div>
+            <span>Paid / Due</span>
+            <strong>${formatMoney(order.amount_paid)} / ${formatMoney(remaining)}</strong>
+          </div>
         </div>
 
         <div class="order-card-actions">
+          ${canPay ? `
+            <button
+              type="button"
+              class="btn btn-primary fonepay-order-pay"
+              data-order-id="${Number(order.id)}"
+            >
+              Pay with Fonepay QR
+            </button>
+          ` : ""}
           <a
             href="/order?id=${encodeURIComponent(order.id)}"
             class="btn btn-secondary"
@@ -178,6 +202,19 @@ function renderOrders(orders) {
 
   list.classList.remove("hidden");
 }
+
+document.getElementById("ordersList").addEventListener("click", event => {
+  const button = event.target.closest(".fonepay-order-pay");
+  if (!button) return;
+  button.disabled = true;
+  window.FonepayQr.open(
+    Number(button.dataset.orderId),
+    null,
+    { onPaid: loadOrders }
+  ).finally(() => {
+    button.disabled = false;
+  });
+});
 
 async function loadOrders() {
   const loading = document.getElementById("ordersLoading");

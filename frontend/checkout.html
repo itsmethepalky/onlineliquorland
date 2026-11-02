@@ -565,6 +565,7 @@
   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
   crossorigin=""
 ></script>
+<script src="/js/fonepay-qr.js"></script>
 
 <script>
 
@@ -1840,6 +1841,7 @@ async function placeOrder(event) {
   placeOrderButton.textContent =
     "Preparing Fonepay payment...";
 
+  let orderCreated = false;
 
   try {
 
@@ -1899,56 +1901,40 @@ if (!response.ok) {
 
 
     /*
-     * The backend creates an order only after Fonepay verifies payment.
-     * Keep the cart until the verified callback succeeds.
+     * The pending order reserves stock. The QR and payment status are
+     * tied to this server-created order, never to client-priced data.
      */
     if (
+      data &&
       data.payment_required === true &&
       data.payment_gateway === "fonepay" &&
-      data.fonepay
+      data.order_id
     ) {
-      const form =
-        document.createElement("form");
-
-      form.method = "POST";
-      form.action =
-        data.fonepay.form_url;
-      form.style.display = "none";
-
-      const fields = {
-        merchant_id: data.fonepay.merchant_id,
-        amount: data.fonepay.amount,
-        currency: data.fonepay.currency,
-        transaction_id: data.fonepay.transaction_id,
-        order_id: data.fonepay.order_id,
-        payment_type: data.fonepay.payment_type,
-        success_url: data.fonepay.success_url,
-        failure_url: data.fonepay.failure_url,
-        signature: data.fonepay.signature
-      };
-
-      Object.entries(fields).forEach(
-        ([name, value]) => {
-          const input =
-            document.createElement("input");
-
-          input.type = "hidden";
-          input.name = name;
-          input.value = value;
-
-          form.appendChild(input);
-        }
+      orderCreated = true;
+      placeOrderButton.textContent = "Payment pending";
+      await window.FonepayQr.open(
+        data.order_id,
+        data.amount_to_pay,
+        { clearCart: true }
       );
-
-      document.body.appendChild(form);
-
-      form.submit();
-
       return;
     }
 
+    console.error(
+      "Unexpected checkout API response:",
+      {
+        status: response.status,
+        fields: data && typeof data === "object"
+          ? Object.keys(data)
+          : []
+      }
+    );
+
     throw new Error(
-      "The payment service did not return a valid payment request."
+      location.hostname === "localhost" ||
+      location.hostname === "127.0.0.1"
+        ? "The local checkout API returned an unexpected response. Open the store at http://127.0.0.1:8000/checkout and run this repository's backend there. Local Fonepay checkout also needs your UAT merchant username and password in backend/.env."
+        : "The checkout service returned an unexpected response. Please refresh the page and try again."
     );
 
   } catch (error) {
@@ -1965,10 +1951,12 @@ if (!response.ok) {
     );
 
 
-    placeOrderButton.disabled = !deliveryPricingValid;
+    placeOrderButton.disabled =
+      orderCreated || !deliveryPricingValid;
 
-    placeOrderButton.textContent =
-      "Pay with Fonepay";
+    placeOrderButton.textContent = orderCreated
+      ? "Payment pending"
+      : "Pay with Fonepay";
 
   }
 

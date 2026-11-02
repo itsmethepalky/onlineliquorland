@@ -60,10 +60,30 @@ class Settings:
         "FONEPAY_MERCHANT_SECRET",
         "",
     )
-    FONEPAY_FORM_URL: str = os.getenv(
-        "FONEPAY_FORM_URL",
-        "https://sandbox.fonepay.com.np/api/payment",
+    FONEPAY_MERCHANT_CODE: str = os.getenv(
+        "FONEPAY_MERCHANT_CODE",
+        os.getenv("FONEPAY_MERCHANT_ID", ""),
+    ).strip()
+    FONEPAY_USERNAME: str = os.getenv(
+        "FONEPAY_USERNAME",
+        "",
+    )
+    FONEPAY_PASSWORD: str = os.getenv(
+        "FONEPAY_PASSWORD",
+        "",
+    )
+    FONEPAY_API_BASE_URL: str = os.getenv(
+        "FONEPAY_API_BASE_URL",
+        "https://dev-merchantapi.fonepay.com/convergentmerchantweb/api",
     ).rstrip("/")
+    FONEPAY_QR_GENERATE_PATH: str = os.getenv(
+        "FONEPAY_QR_GENERATE_PATH",
+        "/merchant/merchantDetailsForThirdParty/thirdPartyDynamicQrDownload",
+    )
+    FONEPAY_QR_VERIFY_PATH: str = os.getenv(
+        "FONEPAY_QR_VERIFY_PATH",
+        "/merchant/merchantDetailsForThirdParty/txnVerification",
+    )
     FONEPAY_VERIFY_URL: str = os.getenv(
         "FONEPAY_VERIFY_URL",
         "https://sandbox.fonepay.com.np/api/verify",
