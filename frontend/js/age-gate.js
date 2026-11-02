@@ -16,6 +16,103 @@
     return;
   }
 
+  const ageGateStyles = document.createElement("style");
+  ageGateStyles.textContent = `
+    html.age-gate-required,
+    html.age-gate-required body {
+      overflow: hidden !important;
+    }
+
+    html.age-gate-required body > :not(.age-gate-overlay) {
+      visibility: hidden !important;
+    }
+
+    .age-gate-overlay {
+      position: fixed !important;
+      z-index: 2147483000 !important;
+      inset: 0 !important;
+      display: grid !important;
+      place-items: center !important;
+      overflow-y: auto !important;
+      padding: 20px !important;
+      background: rgba(25, 18, 19, 0.88) !important;
+      color: #211a1b !important;
+      visibility: visible !important;
+    }
+
+    .age-gate-panel {
+      width: min(100%, 520px) !important;
+      padding: clamp(24px, 6vw, 42px) !important;
+      border: 1px solid #e5dbcc !important;
+      border-radius: 18px !important;
+      background: #fbf8f1 !important;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3) !important;
+      text-align: center !important;
+    }
+
+    .age-gate-eyebrow {
+      margin: 0 0 12px !important;
+      color: #4e202a !important;
+      font-size: 0.75rem !important;
+      font-weight: 800 !important;
+      letter-spacing: 0.15em !important;
+    }
+
+    .age-gate-panel h1 {
+      margin: 0 0 14px !important;
+      font-family: Georgia, "Times New Roman", serif !important;
+      font-size: clamp(1.8rem, 6vw, 2.4rem) !important;
+      line-height: 1.18 !important;
+    }
+
+    .age-gate-panel p {
+      line-height: 1.65 !important;
+    }
+
+    .age-gate-notice {
+      color: #675c59 !important;
+      font-size: 0.88rem !important;
+    }
+
+    .age-gate-actions {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      gap: 12px !important;
+      margin-top: 24px !important;
+    }
+
+    .age-gate-button {
+      min-height: 48px !important;
+      border: 1px solid #4e202a !important;
+      border-radius: 12px !important;
+      padding: 10px 16px !important;
+      font: inherit !important;
+      font-weight: 750 !important;
+      cursor: pointer !important;
+    }
+
+    .age-gate-yes {
+      background: #4e202a !important;
+      color: #fff !important;
+    }
+
+    .age-gate-no {
+      background: transparent !important;
+      color: #211a1b !important;
+    }
+
+    .age-gate-button:focus-visible {
+      outline: 3px solid #b88a49 !important;
+      outline-offset: 3px !important;
+    }
+
+    @media (max-width: 480px) {
+      .age-gate-actions {
+        grid-template-columns: 1fr !important;
+      }
+    }
+  `;
+  document.head.append(ageGateStyles);
   document.documentElement.classList.add("age-gate-required");
 
   function renderAgeGate() {
