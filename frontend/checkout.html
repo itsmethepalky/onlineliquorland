@@ -694,7 +694,7 @@ let deliveryPreviewTimer = null;
 let deliverySearchRequestId = 0;
 let reverseLookupRequestId = 0;
 const DELIVERY_LOCATION_KEY = "blueMoonDeliveryLocation";
-const DELIVERY_LOCATION_MAX_AGE_MS = 30 * 60 * 1000;
+const DELIVERY_LOCATION_MAX_AGE_MS = 5 * 60 * 1000;
 
 
 function formatPrice(value) {
@@ -1112,21 +1112,21 @@ function getRecentDeliveryLocation() {
       return null;
     }
 
-    return { latitude, longitude };
+    return { latitude, longitude, savedAt: Number(location.savedAt) };
   } catch (error) {
     console.warn("Could not read the saved delivery location.");
     return null;
   }
 }
 
-function saveDeliveryLocation(latitude, longitude) {
+function saveDeliveryLocation(latitude, longitude, savedAt = Date.now()) {
   try {
     sessionStorage.setItem(
       DELIVERY_LOCATION_KEY,
       JSON.stringify({
         latitude,
         longitude,
-        savedAt: Date.now()
+        savedAt
       })
     );
   } catch (error) {
@@ -1134,11 +1134,16 @@ function saveDeliveryLocation(latitude, longitude) {
   }
 }
 
-function setSelectedDeliveryLocation(latitude, longitude, address) {
+function setSelectedDeliveryLocation(
+  latitude,
+  longitude,
+  address,
+  savedAt = Date.now()
+) {
   reverseLookupRequestId += 1;
   deliveryLatitude.value = String(latitude);
   deliveryLongitude.value = String(longitude);
-  saveDeliveryLocation(latitude, longitude);
+  saveDeliveryLocation(latitude, longitude, savedAt);
   const selectedAddress = String(address).slice(0, 500);
   shippingAddress.value = selectedAddress;
   deliveryAddressSearch.value = selectedAddress;
@@ -1198,11 +1203,16 @@ async function requestAddressLookup(path, query = {}) {
   return data;
 }
 
-async function selectDeliveryCoordinates(latitude, longitude) {
+async function selectDeliveryCoordinates(
+  latitude,
+  longitude,
+  savedAt = Date.now()
+) {
   const requestId = ++reverseLookupRequestId;
   promoPreviewRequestId += 1;
   deliveryLatitude.value = String(latitude);
   deliveryLongitude.value = String(longitude);
+  saveDeliveryLocation(latitude, longitude, savedAt);
   deliveryPricingValid = false;
   placeOrderButton.disabled = true;
   clearDeliveryQuote();
@@ -1222,7 +1232,16 @@ async function selectDeliveryCoordinates(latitude, longitude) {
   }
   deliveryMap.setView(position, 16);
   deliveryLocationMessage.textContent =
-    "Looking up the selected address...";
+    "Location selected. Calculating the walking route and delivery fee...";
+  deliveryCoordinateDisplay.textContent =
+    `Latitude: ${Number(latitude).toFixed(6)}, Longitude: ${Number(longitude).toFixed(6)}`;
+  deliveryCoordinateDisplay.classList.remove("hidden");
+  deliveryGoogleMapsLink.href =
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+      `${latitude},${longitude}`
+    )}`;
+  deliveryGoogleMapsLink.classList.remove("hidden");
+  scheduleDeliveryPreview();
 
   try {
     const data = await requestAddressLookup(
@@ -1235,18 +1254,17 @@ async function selectDeliveryCoordinates(latitude, longitude) {
     setSelectedDeliveryLocation(
       latitude,
       longitude,
-      data.display_name
+      data.display_name,
+      savedAt
     );
   } catch (error) {
     if (requestId === reverseLookupRequestId) {
-      deliveryLatitude.value = "";
-      deliveryLongitude.value = "";
-      deliveryCoordinateDisplay.classList.add("hidden");
-      deliveryGoogleMapsLink.classList.add("hidden");
-      deliveryMarker?.remove();
-      deliveryMarker = null;
-      deliveryLocationMessage.textContent =
-        error.message || "Could not find an address at this location.";
+      console.warn("Delivery address reverse lookup failed:", error);
+      if (!deliveryPricingValid) {
+        deliveryLocationMessage.textContent =
+          error.message ||
+          "Location selected. Add your street address while the route is calculated.";
+      }
     }
   }
 }
@@ -1698,6 +1716,63 @@ async function loadCustomer() {
 }
 
 
+async function resumePendingCheckout(cart) {
+  const {
+    data: { session }
+  } = await window.supabaseClient.auth.getSession();
+
+  if (!session) {
+    return false;
+  }
+
+  const response = await fetch(
+    `${API_BASE}/api/checkout/pending`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + session.access_token,
+      },
+      body: JSON.stringify({
+        items: cart.map(item => ({
+          product_id: Number(item.product_id),
+          quantity: Number(item.quantity)
+        }))
+      })
+    }
+  );
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      data.detail || "Unable to check for an existing pending payment."
+    );
+  }
+
+  if (data.pending !== true) {
+    return false;
+  }
+
+  checkoutSubtotal.textContent =
+    formatPrice(data.order.subtotal);
+  checkoutDiscount.textContent =
+    formatPrice(data.order.discount);
+  checkoutDelivery.textContent =
+    formatPrice(data.order.delivery_charge);
+  checkoutTotal.textContent =
+    formatPrice(data.order.total_amount);
+  deliveryLocationMessage.textContent =
+    `Reopening payment for existing order ${data.order_no}.`;
+
+  await window.FonepayQr.open(
+    data.order_id,
+    data.amount_to_pay,
+    { clearCart: true }
+  );
+  return true;
+}
+
+
 if (applyPromoButton) {
   applyPromoButton.addEventListener(
     "click",
@@ -2003,18 +2078,28 @@ async function initialize() {
       "hidden"
     );
     const mapReady = await initializeDeliveryMap();
-    if (mapReady) {
-      const savedLocation = getRecentDeliveryLocation();
-      if (savedLocation) {
-        deliveryLocationMessage.textContent =
-          "Using your saved delivery location...";
-        await selectDeliveryCoordinates(
-          savedLocation.latitude,
-          savedLocation.longitude
-        );
-      } else {
-        requestCurrentLocation();
-      }
+    const savedLocation = mapReady
+      ? getRecentDeliveryLocation()
+      : null;
+    if (savedLocation) {
+      deliveryLocationMessage.textContent =
+        "Using your saved delivery location...";
+      await selectDeliveryCoordinates(
+        savedLocation.latitude,
+        savedLocation.longitude,
+        savedLocation.savedAt
+      );
+    }
+
+    const resumedPendingCheckout =
+      await resumePendingCheckout(getCart());
+
+    if (resumedPendingCheckout) {
+      return;
+    }
+
+    if (mapReady && !savedLocation) {
+      requestCurrentLocation();
     }
 
   } catch (error) {
@@ -2029,7 +2114,7 @@ async function initialize() {
     );
 
     showCheckoutError(
-      "Unable to load checkout. Please try again."
+      error.message || "Unable to load checkout. Please try again."
     );
 
   }

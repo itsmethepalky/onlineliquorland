@@ -79,6 +79,7 @@ then apply these checkout migrations in this order:
 12. `database/migrations/022_fonepay_whatsapp_order_notifications.sql`
 13. `database/migrations/023_whatsapp_webhook_events.sql`
 14. `database/migrations/024_fonepay_dynamic_qr.sql`
+15. `database/migrations/025_fonepay_checkout_idempotency.sql`
 
 The checkout migrations define the seven-argument checkout function; the
 server-side promotions migration also drops the obsolete six-argument version.
@@ -123,6 +124,10 @@ Migration 021 creates the public-read `product-images` Storage bucket with
 staff-only write policies; apply it when product image uploads use Supabase
 Storage. Migration 022 installs service-role-only notification claims so
 duplicate Fonepay callbacks do not send duplicate WhatsApp order alerts.
+Migration 025 adds an idempotent order-creation RPC and a pending-order lookup
+so retries and returning to checkout reopen the existing Fonepay order and QR
+instead of creating another order for the same cart. Apply it after migration
+024 before deploying the matching backend.
 
 ## Admin WhatsApp order notifications
 

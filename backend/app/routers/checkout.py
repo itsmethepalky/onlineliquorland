@@ -46,6 +46,10 @@ class CheckoutItem(BaseModel):
     quantity: int = Field(gt=0)
 
 
+class PendingCheckoutRequest(BaseModel):
+    items: list[CheckoutItem] = Field(min_length=1, max_length=100)
+
+
 class CheckoutRequest(BaseModel):
     phone: str = Field(min_length=7, max_length=30)
     shipping_address: str = Field(min_length=5, max_length=500)
@@ -271,6 +275,156 @@ def _delivery_rpc_arguments(
     return {
         "p_delivery_distance_km": str(distance_km),
         "distance_km": distance_km,
+    }
+
+
+def _checkout_items_match(
+    order_items: list[dict],
+    requested_items: list[CheckoutItem],
+) -> bool:
+    existing = sorted(
+        (int(item["product_id"]), int(item["quantity"]))
+        for item in order_items
+    )
+    requested = sorted(
+        (item.product_id, item.quantity)
+        for item in requested_items
+    )
+    return existing == requested
+
+
+def _checkout_cart_fingerprint(items: list[CheckoutItem]) -> str:
+    canonical_items = sorted(
+        (item.product_id, item.quantity)
+        for item in items
+    )
+    serialized_items = json.dumps(
+        canonical_items,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(serialized_items).hexdigest()
+
+
+def _find_pending_fonepay_order(
+    customer_id: int,
+    items: list[CheckoutItem],
+) -> dict | None:
+    try:
+        response = (
+            supabase_admin
+            .table("orders")
+            .select(
+                "id,order_no,customer_id,status,payment_method,"
+                "payment_status,subtotal,discount,delivery_charge,"
+                "promo_code,total_amount,amount_paid,created_at,"
+                "order_items(product_id,quantity)"
+            )
+            .eq("customer_id", customer_id)
+            .eq("payment_method", "fonepay")
+            .in_("payment_status", ["unpaid", "partial"])
+            .neq("status", "cancelled")
+            .order("created_at", desc=True)
+            .limit(1000)
+            .execute()
+        )
+    except Exception as exc:
+        print("PENDING FONEPAY ORDER LOOKUP ERROR:", repr(exc), flush=True)
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to check for an existing pending order.",
+        ) from exc
+
+    for order in response.data or []:
+        if not _checkout_items_match(
+            order.get("order_items") or [],
+            items,
+        ):
+            continue
+
+        try:
+            payment_response = (
+                supabase_admin
+                .table("fonepay_qr_payments")
+                .select("expected_amount,status")
+                .eq("order_id", order["id"])
+                .in_("status", ["pending", "failed", "expired"])
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            print("PENDING FONEPAY QR LOOKUP ERROR:", repr(exc), flush=True)
+            raise HTTPException(
+                status_code=503,
+                detail="Unable to recover the existing payment request.",
+            ) from exc
+
+        attempts = payment_response.data or []
+        attempt = attempts[0] if attempts else None
+        outstanding_amount = (
+            Decimal(str(order["total_amount"]))
+            - Decimal(str(order.get("amount_paid") or 0))
+        )
+        amount_to_pay = (
+            Decimal(str(attempt["expected_amount"]))
+            if attempt
+            else outstanding_amount
+        )
+        return {
+            "order": order,
+            "amount_to_pay": amount_to_pay,
+            "has_saved_amount": bool(attempt),
+        }
+
+    return None
+
+
+def _pending_order_response(
+    pending: dict,
+    amount_to_pay: Decimal | None = None,
+) -> dict:
+    order = pending["order"]
+    amount = amount_to_pay or pending["amount_to_pay"]
+    total_amount = Decimal(str(order["total_amount"]))
+    amount = min(amount, total_amount - Decimal(str(order.get("amount_paid") or 0)))
+
+    return {
+        "success": True,
+        "payment_required": True,
+        "payment_gateway": "fonepay",
+        "order_id": order["id"],
+        "order_no": order["order_no"],
+        "order": {
+            "subtotal": order["subtotal"],
+            "discount": order["discount"],
+            "delivery_charge": order.get("delivery_charge") or 0,
+            "promo_code": order.get("promo_code"),
+            "total_amount": total_amount,
+            "amount_paid": Decimal(str(order.get("amount_paid") or 0)),
+            "remaining_balance": total_amount
+            - Decimal(str(order.get("amount_paid") or 0)),
+            "initial_payment_amount": amount,
+        },
+        "amount_to_pay": _format_decimal(amount),
+    }
+
+
+@router.post("/pending")
+def pending_checkout(
+    payload: PendingCheckoutRequest,
+    current=Depends(get_current_customer),
+):
+    pending = _find_pending_fonepay_order(
+        current["customer"]["id"],
+        payload.items,
+    )
+    if not pending:
+        return {"pending": False}
+
+    result = _pending_order_response(pending)
+    return {
+        "pending": True,
+        **result,
     }
 
 
@@ -784,6 +938,33 @@ def create_checkout_order(
             detail="Fonepay payment is not configured.",
         )
 
+    pending = _find_pending_fonepay_order(
+        customer["id"],
+        payload.items,
+    )
+    if pending:
+        order = pending["order"]
+        total_amount = Decimal(str(order["total_amount"]))
+        outstanding_amount = (
+            total_amount - Decimal(str(order.get("amount_paid") or 0))
+        )
+        if pending["has_saved_amount"]:
+            amount_to_pay = pending["amount_to_pay"]
+        else:
+            if payload.payment_method in {"fonepay_partial", "fonepay"}:
+                requested_amount = (
+                    payload.initial_payment or FONEPAY_MIN_INITIAL_PAYMENT
+                )
+                if requested_amount < FONEPAY_MIN_INITIAL_PAYMENT:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Initial payment must be at least NPR 300.",
+                    )
+            else:
+                requested_amount = outstanding_amount
+            amount_to_pay = min(requested_amount, outstanding_amount)
+        return _pending_order_response(pending, amount_to_pay)
+
     delivery = _delivery_rpc_arguments(payload)
     promo_code = (
         payload.promo_code.strip()
@@ -925,7 +1106,7 @@ def create_checkout_order(
 
     try:
         order_response = supabase_admin.rpc(
-            "create_store_order_with_delivery_location",
+            "create_store_order_with_delivery_location_idempotent",
             {
                 "p_customer_id": customer["id"],
                 "p_phone": payload.phone.strip(),
@@ -939,6 +1120,9 @@ def create_checkout_order(
                 ],
                 "p_delivery_latitude": payload.delivery_latitude,
                 "p_delivery_longitude": payload.delivery_longitude,
+                "p_cart_fingerprint": _checkout_cart_fingerprint(
+                    payload.items
+                ),
             },
         ).execute()
     except Exception as exc:
@@ -963,8 +1147,9 @@ def create_checkout_order(
             and "create_store_order_with_delivery_location" in error_text
         ):
             detail = (
-                "The delivery-location order function is not installed. "
-                "Apply database migration 016 in Supabase."
+                "Idempotent Fonepay checkout is not installed. "
+                "Apply database migration 025_fonepay_checkout_idempotency.sql "
+                "in Supabase."
             )
             status_code = 503
         elif (

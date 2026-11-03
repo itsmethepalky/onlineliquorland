@@ -525,13 +525,9 @@ def create_fonepay_qr(
 
     attempt = existing_response.data
     amount_to_pay = (
-        payload.amount
-        if payload.amount is not None
-        else (
-            Decimal(str(attempt["expected_amount"]))
-            if attempt
-            else outstanding_amount
-        )
+        Decimal(str(attempt["expected_amount"]))
+        if attempt
+        else payload.amount or outstanding_amount
     )
     if amount_to_pay > outstanding_amount:
         raise HTTPException(
@@ -545,14 +541,6 @@ def create_fonepay_qr(
         )
 
     if attempt:
-        if Decimal(str(attempt["expected_amount"])) != amount_to_pay:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "This order already has an outstanding QR payment "
-                    "for a different amount. Complete or verify it first."
-                ),
-            )
         if attempt.get("qr_message"):
             return {
                 "success": True,
