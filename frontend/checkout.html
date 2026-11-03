@@ -295,7 +295,7 @@
                 class="delivery-location-message"
                 aria-live="polite"
               >
-                Delivery is available within a 9 km radius of the store. Delivery pricing uses the driving route. Search for an address, choose a map point, or use your current location. Map data © OpenStreetMap contributors.
+                Delivery is available within a 9 km radius of the store. Delivery pricing uses the walking route. Search for an address, choose a map point, or use your current location. Map data © OpenStreetMap contributors.
               </small>
 
               <input id="deliveryLatitude" type="hidden">
@@ -882,7 +882,7 @@ async function previewCheckoutPricing() {
     placeOrderButton.disabled = true;
     clearDeliveryQuote();
     deliveryLocationMessage.textContent =
-      "Select a delivery location to calculate the driving route and delivery fee.";
+      "Select a delivery location to calculate the walking route and delivery fee.";
     return false;
   }
 
@@ -891,7 +891,7 @@ async function previewCheckoutPricing() {
   placeOrderButton.disabled = true;
   clearDeliveryQuote();
   deliveryLocationMessage.textContent =
-    "Calculating driving route and delivery fee...";
+    "Calculating walking route and delivery fee...";
 
   if (applyPromoButton && code) {
     applyPromoButton.disabled = true;
@@ -957,7 +957,7 @@ async function previewCheckoutPricing() {
     deliveryPricingValid = true;
     placeOrderButton.disabled = false;
     deliveryLocationMessage.textContent =
-      `Driving route: ${Number(data.delivery_distance_km).toFixed(3)} km. Delivery includes the base fare plus NPR 50 per kilometer.`;
+      `Walking route: ${Number(data.delivery_distance_km).toFixed(3)} km. Delivery includes the base fare plus NPR 50 per kilometer.`;
 
     const deliveryDiscount =
       Number(data.delivery_discount || 0);
@@ -1168,7 +1168,7 @@ function setSelectedDeliveryLocation(latitude, longitude, address) {
   deliveryMap.setView(position, 16);
 
   deliveryLocationMessage.textContent =
-    "Location selected. Calculating the driving route and delivery fee...";
+    "Location selected. Calculating the walking route and delivery fee...";
   scheduleDeliveryPreview();
 }
 
@@ -1415,7 +1415,7 @@ shippingAddress.addEventListener("input", () => {
   deliveryMarker?.remove();
   deliveryMarker = null;
   deliveryLocationMessage.textContent =
-    "Select this address on the map to calculate the driving route.";
+    "Select this address on the map to calculate the walking route.";
 });
 
 phone.addEventListener("input", () => {

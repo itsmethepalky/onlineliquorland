@@ -21,6 +21,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js"></script>
+  <script src="/js/product-links.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
 
@@ -417,7 +418,7 @@ function renderProducts(products) {
         <article class="product-card">
 
           <a
-            href="/product?id=${product.id}"
+            href="${productUrl(product)}"
             class="product-image"
           >
 
@@ -443,7 +444,7 @@ function renderProducts(products) {
           <div class="product-info">
 
             <h3>
-              <a href="/product?id=${product.id}">
+              <a href="${productUrl(product)}">
                 ${escapeHtml(product.name)}
               </a>
             </h3>

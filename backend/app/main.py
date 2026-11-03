@@ -1,4 +1,5 @@
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from .auth import get_current_customer, get_current_user
 from .config import settings
+from .product_urls import product_slug
 from .routers import admin, catalog, checkout, fonepay, whatsapp_webhook
 from .supabase import supabase_admin
 from .supabase_retry import execute_read_with_retry
@@ -105,8 +107,9 @@ def robots_txt():
     return (
         "User-agent: *\n"
         "Allow: /\n"
+        "Allow: /product\n"
         "Disallow: /api/\n"
-        f"Sitemap: {settings.SEO_SITE_URL}/sitemap.xml\n"
+        f"Sitemap: {settings.SEO_SITE_URL.rstrip('/')}/sitemap.xml\n"
     )
 
 
@@ -120,10 +123,37 @@ def sitemap_xml():
         "/privacy-policy",
         "/terms-and-conditions",
     )
+    site_url = settings.SEO_SITE_URL.rstrip("/")
     urls = "".join(
-        f"<url><loc>{settings.SEO_SITE_URL}{path}</loc></url>"
+        f"<url><loc>{escape(site_url + path)}</loc></url>"
         for path in paths
     )
+
+    product_offset = 0
+    product_page_size = 1000
+    while True:
+        response = execute_read_with_retry(
+            supabase_admin
+            .table("products")
+            .select("id,name")
+            .eq("is_active", True)
+            .order("id")
+            .range(product_offset, product_offset + product_page_size - 1),
+            operation="SEO SITEMAP PRODUCTS",
+        )
+        products = response.data or []
+        urls += "".join(
+            "<url><loc>"
+            + escape(
+                f"{site_url}/product/{product_slug(product['name'])}"
+            )
+            + "</loc></url>"
+            for product in products
+        )
+        if len(products) < product_page_size:
+            break
+        product_offset += product_page_size
+
     return Response(
         content=(
             '<?xml version="1.0" encoding="UTF-8"?>'
@@ -442,6 +472,11 @@ def frontend_terms_and_conditions():
 
 @app.get("/product", include_in_schema=False)
 def frontend_product():
+    return serve_page("product.html")
+
+
+@app.get("/product/{slug}", include_in_schema=False)
+def frontend_product_by_slug(slug: str):
     return serve_page("product.html")
 
 

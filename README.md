@@ -34,7 +34,7 @@ stops before creating an order; it does not simulate or mark a payment as paid.
 ## Route-based checkout delivery
 
 Checkout uses Leaflet with OpenStreetMap tiles for map pin selection. Address
-search and reverse geocoding use Nominatim, and the backend calculates driving
+search and reverse geocoding use Nominatim, and the backend calculates walking
 distance through OSRM, choosing the shortest route returned when alternatives
 are available. The landing page silently requests browser location access and
 saves a successful result for the current browser tab. Checkout sends the
@@ -52,10 +52,10 @@ Configure these backend environment variables:
 
 - `OSM_NOMINATIM_URL`: Nominatim service base URL; defaults to
   `https://nominatim.openstreetmap.org`.
-- `OSM_ROUTING_URL`: OSRM service base URL; defaults to
-  `https://router.project-osrm.org`.
-- `OSM_ROUTING_FALLBACK_URL`: optional second OSRM-compatible routing service,
-  tried when the primary service cannot be reached or returns an error.
+- `OSM_ROUTING_URL`: OSRM foot-profile service base URL; defaults to
+  `https://routing.openstreetmap.de/routed-foot`.
+- `OSM_ROUTING_FALLBACK_URL`: optional OSRM-compatible foot-profile service,
+  tried when the primary cannot be reached or returns an error.
 - `STORE_CONTACT_EMAIL`: contact included with Nominatim requests.
 - `STORE_ORIGIN_LATITUDE` and `STORE_ORIGIN_LONGITUDE`: private store coordinates.
   Do not put the origin in frontend code or expose it through an API response.
@@ -246,7 +246,10 @@ currently use `https://onlineliquorland.com`; update those URLs if
 the store moves to a different public domain.
 
 The storefront includes page metadata, social sharing tags, structured data,
-and a sitemap for its main public pages. Search engines control their own
+and a sitemap containing the main public pages and every active product
+detail URL. Product detail URLs use a slug derived from the product name (for
+example, `/product/blue-label-whisky`). The robots file permits product
+crawling and points crawlers to the sitemap. Search engines control their own
 crawling and ranking, so no implementation can guarantee a particular SEO
 score or ranking. Review the Privacy Policy and Terms and Conditions against
 the store's actual practices and applicable local law before relying on them
@@ -260,7 +263,7 @@ OSM-compatible hosted services or self-host them, and review their attribution
 and usage requirements.
 
 Checkout accepts delivery addresses within a 9 km straight-line radius of the
-configured store origin. Delivery pricing still uses the shortest driving
+configured store origin. Delivery pricing uses the shortest walking
 route. The backend enforces the radius during both price preview and payment
 preparation; the browser cannot bypass the limit.
 

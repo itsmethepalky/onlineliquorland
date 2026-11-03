@@ -18,12 +18,12 @@ class Settings:
     ).rstrip("/")
     OSM_ROUTING_URL: str = os.getenv(
         "OSM_ROUTING_URL",
-        "https://router.project-osrm.org",
+        "https://routing.openstreetmap.de/routed-foot",
     ).rstrip("/")
     OSM_ROUTING_FALLBACK_URL: str = os.getenv(
         "OSM_ROUTING_FALLBACK_URL",
         "",
-    ).rstrip("/")
+    ).strip().rstrip("/")
     STORE_CONTACT_EMAIL: str = os.getenv(
         "STORE_CONTACT_EMAIL",
         "",

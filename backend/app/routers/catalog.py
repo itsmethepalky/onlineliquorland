@@ -5,6 +5,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 
 from ..supabase import supabase_admin
+from ..product_urls import product_slug
 
 router = APIRouter(prefix="/api", tags=["Catalog"])
 
@@ -318,3 +319,43 @@ def get_product(product_id: int):
     add_taxonomy_names([product])
     add_product_images([product])
     return clean_product(product)
+
+
+@router.get("/products/by-slug/{slug}")
+def get_product_by_slug(slug: str):
+    page_size = 1000
+    offset = 0
+    matches = []
+
+    while True:
+        response = execute_with_retry(
+            supabase_admin
+            .table("products")
+            .select("id,name")
+            .eq("is_active", True)
+            .order("id")
+            .range(offset, offset + page_size - 1)
+        )
+        products = response.data or []
+        matches.extend(
+            product
+            for product in products
+            if product_slug(product["name"]) == slug
+        )
+        if len(products) < page_size:
+            break
+        offset += page_size
+
+    if not matches:
+        raise HTTPException(
+            status_code=404,
+            detail="Product not found",
+        )
+
+    if len(matches) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail="Product URL is ambiguous",
+        )
+
+    return get_product(matches[0]["id"])

@@ -16,11 +16,12 @@
   <title>Product — ONLINE LIQUOR LAND</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 
-  <link rel="stylesheet" href="css/store.css">
+  <link rel="stylesheet" href="/css/store.css">
   <script src="/js/age-gate.js"></script>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/supabase.js"></script>
+  <script src="/js/supabase.js"></script>
+  <script src="/js/product-links.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
 
@@ -542,7 +543,7 @@ function renderProduct(product) {
   document.querySelector('meta[property="og:description"]').content =
     seoDescription;
   const canonicalUrl =
-    `${window.location.origin}/product?id=${encodeURIComponent(product.id)}`;
+    `${window.location.origin}${productUrl(product)}`;
   document.querySelector('link[rel="canonical"]').href = canonicalUrl;
   document.querySelector('meta[property="og:url"]').content = canonicalUrl;
   const productStructuredData = {
@@ -689,7 +690,7 @@ function renderMoreProducts(products) {
     return `
       <article class="product-card">
         <a
-          href="/product?id=${encodeURIComponent(product.id)}"
+          href="${productUrl(product)}"
           class="product-image"
         >
           ${
@@ -704,7 +705,7 @@ function renderMoreProducts(products) {
         </a>
         <div class="product-info">
           <h3>
-            <a href="/product?id=${encodeURIComponent(product.id)}">
+            <a href="${productUrl(product)}">
               ${escapeHtml(product.name)}
             </a>
           </h3>
@@ -756,12 +757,13 @@ async function loadMoreProducts(currentProductId) {
 
 
 async function loadProduct() {
+  const productPath = window.location.pathname;
+  const slug = productPath.startsWith("/product/")
+    ? decodeURIComponent(productPath.slice("/product/".length))
+    : "";
+  const productId = getProductId();
 
-  const productId =
-    getProductId();
-
-
-  if (!productId) {
+  if (!slug && !productId) {
 
     showError();
     return;
@@ -773,7 +775,9 @@ async function loadProduct() {
 
     const response =
       await fetch(
-        `${API_BASE}/api/products/${productId}`
+        slug
+          ? `${API_BASE}/api/products/by-slug/${encodeURIComponent(slug)}`
+          : `${API_BASE}/api/products/${encodeURIComponent(productId)}`
       );
 
 

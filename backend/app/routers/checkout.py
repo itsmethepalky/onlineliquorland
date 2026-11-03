@@ -161,7 +161,7 @@ def _calculate_delivery_distance_km(
         try:
             candidate = httpx.get(
                 (
-                    f"{routing_url}/route/v1/driving/"
+                    f"{routing_url}/route/v1/foot/"
                     f"{origin_longitude},{origin_latitude};"
                     f"{longitude},{latitude}"
                 ),
@@ -213,7 +213,7 @@ def _calculate_delivery_distance_km(
     ) as exc:
         raise HTTPException(
             status_code=422,
-            detail="No driving route is available for this address.",
+            detail="No walking route is available for this address.",
         ) from exc
 
     if not route_distances or any(
@@ -222,7 +222,7 @@ def _calculate_delivery_distance_km(
     ):
         raise HTTPException(
             status_code=422,
-            detail="No driving route is available for this address.",
+            detail="No walking route is available for this address.",
         )
 
     distance_meters = min(route_distances)
