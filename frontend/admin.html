@@ -324,6 +324,95 @@
     </div>
   </section>
 
+  <section class="admin-panel admin-promo-section">
+    <div class="admin-panel-heading">
+      <div>
+        <span class="eyebrow">Store Availability</span>
+        <h2>Maintenance Windows</h2>
+      </div>
+      <strong id="maintenanceStatus" role="status">Loading status…</strong>
+    </div>
+
+    <p>
+      Add as many one-time or daily maintenance windows as needed. Each window
+      can show its own message; overlapping windows show all active messages.
+      Times use Nepal time (Asia/Kathmandu).
+    </p>
+
+    <div id="maintenanceError" class="notice error hidden"></div>
+    <div id="maintenanceSuccess" class="notice success hidden"></div>
+
+    <form id="maintenanceForm" class="admin-promo-form maintenance-form">
+      <label for="maintenanceMode">New maintenance window</label>
+      <select id="maintenanceMode" required>
+        <option value="now">Start now</option>
+        <option value="scheduled">Schedule once</option>
+        <option value="daily">Repeat daily</option>
+      </select>
+
+      <div id="maintenanceStartFields" class="maintenance-schedule-fields hidden">
+        <label for="maintenanceStartsAt">Start date and time (Nepal time)</label>
+        <input id="maintenanceStartsAt" type="datetime-local">
+      </div>
+
+      <div id="maintenanceDurationFields" class="maintenance-schedule-fields hidden">
+        <label for="maintenanceDuration">Duration (hours, optional)</label>
+        <input
+          id="maintenanceDuration"
+          type="number"
+          min="0.25"
+          max="720"
+          step="0.25"
+          inputmode="decimal"
+          placeholder="Leave blank to turn off manually"
+        >
+        <small>When set, the store reopens automatically afterward.</small>
+      </div>
+
+      <div id="maintenanceDailyFields" class="maintenance-schedule-fields hidden">
+        <label for="maintenanceDailyTime">Daily start time (Nepal time)</label>
+        <input id="maintenanceDailyTime" type="time">
+        <label for="maintenanceDailyDuration">Daily duration (hours)</label>
+        <input
+          id="maintenanceDailyDuration"
+          type="number"
+          min="0.25"
+          max="23.75"
+          step="0.25"
+          inputmode="decimal"
+          required
+        >
+        <small>The store reopens automatically after each daily maintenance window.</small>
+      </div>
+
+      <label for="maintenanceMessage">Message shown to customers</label>
+      <textarea
+        id="maintenanceMessage"
+        maxlength="1000"
+        rows="3"
+        placeholder="Write the message customers will see"
+      ></textarea>
+
+      <button type="submit" class="admin-action admin-promo-button primary">
+        <i class="bi bi-tools"></i>
+        <span>Add Maintenance Window</span>
+      </button>
+    </form>
+
+    <div class="admin-promo-list">
+      <div class="admin-panel-heading admin-promo-list-heading">
+        <div>
+          <span class="eyebrow">Management</span>
+          <h3>Saved Maintenance Windows</h3>
+        </div>
+      </div>
+      <div id="maintenanceSchedules" class="admin-list">
+        <div class="loading-state">Loading maintenance windows…</div>
+      </div>
+    </div>
+  </section>
+
+
   <section class="admin-quick-actions">
     <a href="/admin/orders" class="admin-action">
       <i class="bi bi-box-seam"></i>
@@ -360,7 +449,10 @@ async function api(url, options = {}) {
   const body = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(body.detail || "Request failed");
+    const detail = Array.isArray(body.detail)
+      ? body.detail.map(item => item.msg).join(" ")
+      : body.detail;
+    throw new Error(detail || "Request failed");
   }
 
   return body;
@@ -562,6 +654,117 @@ async function loadStoreSettings() {
     Number(settings.delivery_charge || 0);
 }
 
+function kathmanduDateTimeLabel(value) {
+  if (!value) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("en-NP", {
+    timeZone: "Asia/Kathmandu",
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(new Date(value));
+}
+
+function updateMaintenanceFields() {
+  const mode = document.getElementById("maintenanceMode").value;
+  const scheduled = mode === "scheduled";
+  const timed = mode === "now" || scheduled;
+  const daily = mode === "daily";
+
+  document.getElementById("maintenanceStartFields")
+    .classList.toggle("hidden", !scheduled);
+  const durationFields = document.getElementById("maintenanceDurationFields");
+  durationFields.classList.toggle("hidden", !timed);
+  const dailyFields = document.getElementById("maintenanceDailyFields");
+  dailyFields.classList.toggle("hidden", !daily);
+
+  const startsAt = document.getElementById("maintenanceStartsAt");
+  startsAt.required = scheduled;
+  startsAt.disabled = !scheduled;
+
+  const duration = document.getElementById("maintenanceDuration");
+  duration.disabled = !timed;
+
+  const dailyTime = document.getElementById("maintenanceDailyTime");
+  dailyTime.required = daily;
+  dailyTime.disabled = !daily;
+
+  const dailyDuration =
+    document.getElementById("maintenanceDailyDuration");
+  dailyDuration.required = daily;
+  dailyDuration.disabled = !daily;
+
+  document.getElementById("maintenanceMessage").required = mode !== "off";
+}
+
+function maintenanceScheduleDescription(schedule) {
+  const duration = schedule.duration_minutes == null
+    ? "until manually disabled"
+    : `${Math.floor(schedule.duration_minutes / 60)}h ${schedule.duration_minutes % 60}m`;
+
+  if (schedule.mode === "daily") {
+    return `Daily at ${String(schedule.daily_time).slice(0, 5)} Nepal time · ${duration}`;
+  }
+
+  return `Once · ${kathmanduDateTimeLabel(schedule.starts_at)} Nepal time · ${duration}`;
+}
+
+function renderMaintenanceSchedule(schedule) {
+  const stateLabels = {
+    active: "Active now",
+    scheduled: "Scheduled",
+    daily: "Repeats daily",
+    expired: "Completed",
+    disabled: "Disabled"
+  };
+  const enabled = schedule.is_enabled;
+  return `
+    <div class="admin-list-row">
+      <span class="maintenance-schedule-copy">
+        <strong>${escapeHtml(stateLabels[schedule.state] || schedule.state)}</strong>
+        <small>${escapeHtml(maintenanceScheduleDescription(schedule))}</small>
+        <small>${escapeHtml(schedule.message)}</small>
+      </span>
+      <span class="admin-list-right maintenance-schedule-actions">
+        <button type="button" class="admin-action"
+          onclick="editMaintenanceMessage(${schedule.id})">
+          <i class="bi bi-pencil"></i><span>Edit message</span>
+        </button>
+        <button type="button" class="admin-action"
+          onclick="toggleMaintenanceSchedule(${schedule.id}, ${enabled})">
+          <i class="bi ${enabled ? "bi-pause-circle" : "bi-play-circle"}"></i>
+          <span>${enabled ? "Disable" : "Enable"}</span>
+        </button>
+        <button type="button" class="admin-action"
+          onclick="deleteMaintenanceSchedule(${schedule.id})">
+          <i class="bi bi-trash"></i><span>Delete</span>
+        </button>
+      </span>
+    </div>
+  `;
+}
+
+async function loadMaintenanceSettings() {
+  const result = await api("/api/admin/maintenance");
+  const schedules = result.schedules || [];
+  const activeCount = schedules.filter(schedule => schedule.active).length;
+  const pendingCount = schedules.filter(schedule =>
+    schedule.is_enabled && ["scheduled", "daily"].includes(schedule.state)
+  ).length;
+
+  document.getElementById("maintenanceStatus").textContent = activeCount
+    ? `Shop is closed now · ${activeCount} active window${activeCount === 1 ? "" : "s"}`
+    : pendingCount
+      ? `${pendingCount} upcoming or recurring window${pendingCount === 1 ? "" : "s"}`
+      : "Shop is open";
+
+  const list = document.getElementById("maintenanceSchedules");
+  list.innerHTML = schedules.length
+    ? schedules.map(renderMaintenanceSchedule).join("")
+    : '<div class="empty-state">No maintenance windows saved.</div>';
+}
+
 async function loadPromotions() {
   const promotions = await api("/api/admin/promotions?include_inactive=true");
 
@@ -622,6 +825,127 @@ async function deletePromotion(id) {
     await loadPromotions();
   } catch (error) {
     showPromoMessage(error.message);
+  }
+}
+
+function showMaintenanceMessage(message, success = false) {
+  const errorBox = document.getElementById("maintenanceError");
+  const successBox = document.getElementById("maintenanceSuccess");
+  errorBox.classList.add("hidden");
+  successBox.classList.add("hidden");
+
+  const box = success ? successBox : errorBox;
+  box.textContent = message;
+  box.classList.remove("hidden");
+}
+
+document.getElementById("maintenanceMode").addEventListener(
+  "change",
+  updateMaintenanceFields
+);
+
+document.getElementById("maintenanceForm").addEventListener(
+  "submit",
+  async event => {
+    event.preventDefault();
+    const mode = document.getElementById("maintenanceMode").value;
+    const payload = {
+      mode,
+      message: document.getElementById("maintenanceMessage").value.trim()
+    };
+
+    if (mode === "scheduled") {
+      const localTime =
+        document.getElementById("maintenanceStartsAt").value;
+      payload.starts_at = new Date(`${localTime}+05:45`).toISOString();
+    }
+
+    if (mode === "now" || mode === "scheduled") {
+      const hours = document.getElementById("maintenanceDuration").value;
+      payload.duration_minutes =
+        hours === "" ? null : Math.round(Number(hours) * 60);
+    }
+
+    if (mode === "daily") {
+      payload.daily_time =
+        document.getElementById("maintenanceDailyTime").value;
+      payload.duration_minutes = Math.round(
+        Number(document.getElementById("maintenanceDailyDuration").value) * 60
+      );
+    }
+
+    try {
+      await api("/api/admin/maintenance", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      showMaintenanceMessage("Maintenance window added.", true);
+      document.getElementById("maintenanceForm").reset();
+      updateMaintenanceFields();
+      await loadMaintenanceSettings();
+    } catch (error) {
+      showMaintenanceMessage(error.message);
+    }
+  }
+);
+
+async function editMaintenanceMessage(scheduleId) {
+  const currentMessage = Array.from(
+    document.querySelectorAll("#maintenanceSchedules .admin-list-row")
+  ).find(row =>
+    row.querySelector(
+      `[onclick="editMaintenanceMessage(${scheduleId})"]`
+    )
+  )?.querySelector(".maintenance-schedule-copy small:last-child")?.textContent;
+  const message = window.prompt(
+    "Message shown to customers during this maintenance window:",
+    currentMessage || ""
+  );
+  if (message === null) {
+    return;
+  }
+
+  try {
+    await api(`/api/admin/maintenance/${scheduleId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ message })
+    });
+    showMaintenanceMessage("Maintenance message updated.", true);
+    await loadMaintenanceSettings();
+  } catch (error) {
+    showMaintenanceMessage(error.message);
+  }
+}
+
+async function toggleMaintenanceSchedule(scheduleId, isEnabled) {
+  try {
+    await api(`/api/admin/maintenance/${scheduleId}/enabled`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_enabled: !isEnabled })
+    });
+    showMaintenanceMessage(
+      isEnabled ? "Maintenance window disabled." : "Maintenance window enabled.",
+      true
+    );
+    await loadMaintenanceSettings();
+  } catch (error) {
+    showMaintenanceMessage(error.message);
+  }
+}
+
+async function deleteMaintenanceSchedule(scheduleId) {
+  if (!window.confirm("Delete this maintenance window?")) {
+    return;
+  }
+
+  try {
+    await api(`/api/admin/maintenance/${scheduleId}`, {
+      method: "DELETE"
+    });
+    showMaintenanceMessage("Maintenance window deleted.", true);
+    await loadMaintenanceSettings();
+  } catch (error) {
+    showMaintenanceMessage(error.message);
   }
 }
 
@@ -731,6 +1055,12 @@ async function loadPromotionManagement() {
     ]);
   } catch (error) {
     showPromoMessage(error.message);
+  }
+
+  try {
+    await loadMaintenanceSettings();
+  } catch (error) {
+    showMaintenanceMessage(error.message);
   }
 }
 

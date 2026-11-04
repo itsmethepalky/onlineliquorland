@@ -5,12 +5,19 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from datetime import datetime, timezone
-from fastapi.responses import FileResponse, PlainTextResponse, Response
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .auth import get_current_customer, get_current_user
 from .config import settings
+from .maintenance import get_maintenance_status
 from .product_urls import product_slug
 from .routers import admin, catalog, checkout, fonepay, whatsapp_webhook
 from .supabase import supabase_admin
@@ -19,6 +26,71 @@ from .supabase_retry import execute_read_with_retry
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = BASE_DIR / "frontend"
+STATIC_ASSET_SUFFIXES = {
+    ".css",
+    ".gif",
+    ".ico",
+    ".jpeg",
+    ".jpg",
+    ".js",
+    ".png",
+    ".svg",
+    ".webp",
+    ".woff",
+    ".woff2",
+}
+
+
+def _bypasses_maintenance(path, method):
+    if method == "OPTIONS":
+        return True
+
+    if path == "/admin" or path.startswith("/admin/"):
+        return True
+
+    if path in {"/login", "/forgot-password", "/reset-password"}:
+        return True
+
+    if Path(path).suffix.lower() in STATIC_ASSET_SUFFIXES:
+        return True
+
+    if path in {
+        "/api/health",
+        "/api/maintenance/status",
+        "/api/auth/me",
+        "/api/checkout/fonepay/success",
+        "/api/checkout/fonepay/failure",
+        "/api/payments/fonepay-callback",
+        "/api/webhooks/whatsapp",
+    }:
+        return True
+
+    return path == "/api/admin" or path.startswith("/api/admin/")
+
+
+def _maintenance_page(message):
+    safe_message = escape(message)
+    return (
+        "<!doctype html><html lang=\"en\"><head>"
+        "<meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+        "<meta name=\"robots\" content=\"noindex,nofollow\">"
+        "<title>Store Maintenance | ONLINE LIQUOR LAND</title>"
+        "<style>"
+        "body{margin:0;min-height:100vh;display:grid;place-items:center;"
+        "padding:24px;box-sizing:border-box;background:#f1e9dc;color:#211a1b;"
+        "font:16px/1.6 system-ui,sans-serif;text-align:center}"
+        "main{width:min(100%,520px);padding:36px 28px;background:#fbf8f1;"
+        "border:1px solid #e5dbcc;border-radius:18px;box-shadow:"
+        "0 18px 50px rgba(40,23,24,.14)}"
+        "h1{font-family:Georgia,serif;color:#702d38}"
+        "p{white-space:pre-wrap;color:#675c59}"
+        "</style></head><body><main>"
+        "<h1>Shop Is closed now</h1>"
+        f"<p>{safe_message}</p>"
+        "<strong>ONLINE LIQUOR LAND</strong>"
+        "</main></body></html>"
+    )
 
 
 class CustomerPhoneUpdate(BaseModel):
@@ -51,7 +123,49 @@ app.add_middleware(
 
 @app.middleware("http")
 async def security_headers(request, call_next):
-    response = await call_next(request)
+    path = request.url.path
+    if _bypasses_maintenance(path, request.method):
+        response = await call_next(request)
+    else:
+        try:
+            maintenance = get_maintenance_status()
+            if maintenance["active"]:
+                message = (
+                    maintenance["message"]
+                    or "Our store is temporarily unavailable. Please check back soon."
+                )
+                if path.startswith("/api/"):
+                    response = JSONResponse(
+                        {
+                            "detail": message,
+                            "maintenance": True,
+                        },
+                        status_code=503,
+                        headers={"Retry-After": "60"},
+                    )
+                else:
+                    response = HTMLResponse(
+                        _maintenance_page(message),
+                        status_code=503,
+                        headers={"Retry-After": "60"},
+                    )
+            else:
+                response = await call_next(request)
+        except HTTPException as exc:
+            if path.startswith("/api/"):
+                response = JSONResponse(
+                    {"detail": exc.detail},
+                    status_code=exc.status_code,
+                    headers={"Retry-After": "60"},
+                )
+            else:
+                response = HTMLResponse(
+                    _maintenance_page(
+                        "Store availability is temporarily unknown. Please try again soon."
+                    ),
+                    status_code=exc.status_code,
+                    headers={"Retry-After": "60"},
+                )
 
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -91,6 +205,11 @@ def health():
         "status": "ok",
         "service": "Online Liquor Land API",
     }
+
+
+@app.get("/api/maintenance/status")
+def public_maintenance_status():
+    return get_maintenance_status()
 
 
 @app.get("/api/public/contact")

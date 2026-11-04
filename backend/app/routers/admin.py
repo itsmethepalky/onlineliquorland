@@ -1,10 +1,16 @@
 from decimal import Decimal
+from datetime import datetime, time, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Optional
 
 from ..auth import get_current_user
+from ..maintenance import (
+    get_maintenance_status,
+    invalidate_maintenance_schedules_cache,
+)
 from ..supabase import supabase_admin
 from ..supabase_retry import (
     execute_read_with_retry,
@@ -1203,6 +1209,56 @@ class DeliveryChargeUpdate(BaseModel):
     delivery_charge: float = Field(ge=0)
 
 
+class MaintenanceScheduleCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["now", "scheduled", "daily"]
+    message: str = Field(min_length=1, max_length=1000)
+    starts_at: Optional[datetime] = None
+    daily_time: Optional[time] = None
+    duration_minutes: Optional[int] = Field(default=None, ge=1, le=43200)
+    is_enabled: bool = True
+
+    @model_validator(mode="after")
+    def validate_schedule(self):
+        if not self.message.strip():
+            raise ValueError("Enter the message customers should see.")
+
+        if self.mode == "scheduled":
+            if self.starts_at is None or self.starts_at.tzinfo is None:
+                raise ValueError("A Nepal date and start time are required.")
+            if self.starts_at <= datetime.now(timezone.utc):
+                raise ValueError("Scheduled start time must be in the future.")
+
+        if self.mode == "daily":
+            if self.daily_time is None:
+                raise ValueError("Choose a daily start time in Nepal time.")
+            if self.duration_minutes is None:
+                raise ValueError("Daily schedules require a duration.")
+            if self.duration_minutes >= 1440:
+                raise ValueError("Daily duration must be less than 24 hours.")
+
+        return self
+
+
+class MaintenanceMessageUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_message(self):
+        if not self.message.strip():
+            raise ValueError("Maintenance message cannot be empty.")
+        return self
+
+
+class MaintenanceScheduleToggle(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_enabled: bool
+
+
 def _validate_promotion_data(data):
     discount_type = str(data.get("discount_type", "")).strip().lower()
     discount_value = float(data.get("discount_value", 0) or 0)
@@ -1690,3 +1746,168 @@ def update_delivery_charge(
         )
 
     return result.data[0]
+
+
+@router.get("/maintenance")
+def list_maintenance_schedules(
+    admin=Depends(get_admin_user),
+):
+    try:
+        return get_maintenance_status()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print("ADMIN MAINTENANCE LIST ERROR:", repr(exc), flush=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not load maintenance schedules.",
+        ) from exc
+
+
+@router.post("/maintenance", status_code=201)
+def create_maintenance_schedule(
+    payload: MaintenanceScheduleCreate,
+    admin=Depends(get_admin_user),
+):
+    starts_at = (
+        datetime.now(timezone.utc).isoformat()
+        if payload.mode == "now"
+        else (
+            payload.starts_at.astimezone(timezone.utc).isoformat()
+            if payload.starts_at
+            else None
+        )
+    )
+    data = {
+        "mode": "scheduled" if payload.mode == "now" else payload.mode,
+        "starts_at": starts_at,
+        "daily_time": (
+            payload.daily_time.isoformat()
+            if payload.mode == "daily" and payload.daily_time
+            else None
+        ),
+        "duration_minutes": payload.duration_minutes,
+        "message": payload.message.strip(),
+        "is_enabled": payload.is_enabled,
+    }
+
+    try:
+        result = (
+            supabase_admin
+            .table("store_maintenance_schedules")
+            .insert(data)
+            .execute()
+        )
+    except Exception as exc:
+        print("ADMIN MAINTENANCE CREATE ERROR:", repr(exc), flush=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not create maintenance schedule.",
+        ) from exc
+
+    if not result.data:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not create maintenance schedule.",
+        )
+
+    invalidate_maintenance_schedules_cache()
+    return result.data[0]
+
+
+@router.patch("/maintenance/{schedule_id}")
+def update_maintenance_schedule_message(
+    schedule_id: int,
+    payload: MaintenanceMessageUpdate,
+    admin=Depends(get_admin_user),
+):
+    try:
+        result = (
+            supabase_admin
+            .table("store_maintenance_schedules")
+            .update({
+                "message": payload.message.strip(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", schedule_id)
+            .execute()
+        )
+    except Exception as exc:
+        print("ADMIN MAINTENANCE MESSAGE UPDATE ERROR:", repr(exc), flush=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not update maintenance message.",
+        ) from exc
+
+    if not result.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Maintenance schedule not found.",
+        )
+
+    invalidate_maintenance_schedules_cache()
+    return result.data[0]
+
+
+@router.patch("/maintenance/{schedule_id}/enabled")
+def toggle_maintenance_schedule(
+    schedule_id: int,
+    payload: MaintenanceScheduleToggle,
+    admin=Depends(get_admin_user),
+):
+    try:
+        result = (
+            supabase_admin
+            .table("store_maintenance_schedules")
+            .update({
+                "is_enabled": payload.is_enabled,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", schedule_id)
+            .execute()
+        )
+    except Exception as exc:
+        print("ADMIN MAINTENANCE TOGGLE ERROR:", repr(exc), flush=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not update maintenance schedule.",
+        ) from exc
+
+    if not result.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Maintenance schedule not found.",
+        )
+
+    invalidate_maintenance_schedules_cache()
+    return result.data[0]
+
+
+@router.delete("/maintenance/{schedule_id}")
+def delete_maintenance_schedule(
+    schedule_id: int,
+    admin=Depends(get_admin_user),
+):
+    try:
+        result = (
+            supabase_admin
+            .table("store_maintenance_schedules")
+            .delete()
+            .eq("id", schedule_id)
+            .execute()
+        )
+    except Exception as exc:
+        print("ADMIN MAINTENANCE DELETE ERROR:", repr(exc), flush=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not delete maintenance schedule.",
+        ) from exc
+
+    if not result.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Maintenance schedule not found.",
+        )
+
+    invalidate_maintenance_schedules_cache()
+    return {"success": True, "schedule_id": schedule_id}

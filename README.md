@@ -80,6 +80,8 @@ then apply these checkout migrations in this order:
 13. `database/migrations/023_whatsapp_webhook_events.sql`
 14. `database/migrations/024_fonepay_dynamic_qr.sql`
 15. `database/migrations/025_fonepay_checkout_idempotency.sql`
+16. `database/migrations/026_store_maintenance_mode.sql`
+17. `database/migrations/027_multiple_maintenance_schedules.sql`
 
 The checkout migrations define the seven-argument checkout function; the
 server-side promotions migration also drops the obsolete six-argument version.
@@ -103,6 +105,14 @@ The checkout scripts were renumbered to remove the duplicate `012_` prefix.
 If an existing database already ran a script under its previous filename,
 do not rerun its renumbered copy solely because the filename changed. Confirm
 which database changes are already present and apply only missing steps.
+
+Apply migrations 026 and 027 before deploying the backend version that manages
+maintenance schedules. The dashboard supports multiple one-time or daily
+windows, each with its own customer message; overlapping windows show all
+active messages. Windows use Nepal time (`Asia/Kathmandu`). One-time durations
+are optional; when omitted, maintenance stays active until an admin disables
+the window. Daily windows require a duration and reopen automatically after
+each window. The customer notice heading is "Shop Is closed now".
 
 Migrations 015–017 are designed to be rerunnable and do not intentionally drop
 functions, tables, or stored data. Migration 015 validates its checkout and
