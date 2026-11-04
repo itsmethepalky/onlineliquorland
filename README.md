@@ -82,6 +82,7 @@ then apply these checkout migrations in this order:
 15. `database/migrations/025_fonepay_checkout_idempotency.sql`
 16. `database/migrations/026_store_maintenance_mode.sql`
 17. `database/migrations/027_multiple_maintenance_schedules.sql`
+18. `database/migrations/028_admin_fcm_tokens.sql`
 
 The checkout migrations define the seven-argument checkout function; the
 server-side promotions migration also drops the obsolete six-argument version.
@@ -138,6 +139,28 @@ Migration 025 adds an idempotent order-creation RPC and a pending-order lookup
 so retries and returning to checkout reopen the existing Fonepay order and QR
 instead of creating another order for the same cart. Apply it after migration
 024 before deploying the matching backend.
+
+## Admin Android push alerts for new orders
+
+The Android admin/staff app uses Firebase Cloud Messaging data messages to
+show a separate high-importance notification for each newly created order,
+including while the app is backgrounded or closed. The former persistent
+foreground order-monitor notification has been removed. Android notification
+permission and the user's notification-channel, silent-mode, and Do Not Disturb
+settings remain authoritative; the app cannot force sound when Android or the
+user suppresses it.
+
+For Android, add the Firebase project's `google-services.json` to
+`BluemoonStore3/app/google-services.json` (the registered Android package must
+be `com.onlineliquorland.store`) and rebuild. For the backend, apply
+`database/migrations/028_admin_fcm_tokens.sql`, install the added
+`firebase-admin` requirement, and configure `FIREBASE_SERVICE_ACCOUNT_JSON`
+with the Firebase service-account JSON in the host's secret environment
+settings. Use a service account from the same Firebase project; do not commit
+the service-account key or put it in Android resources. Admin/staff devices
+register their FCM tokens through an authenticated endpoint. A newly created
+checkout order triggers a best-effort push; notification delivery requires
+Firebase configuration and granted device notification permission.
 
 ## Admin WhatsApp order notifications
 

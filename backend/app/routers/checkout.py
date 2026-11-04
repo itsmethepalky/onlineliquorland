@@ -19,6 +19,7 @@ from ..auth import get_current_customer
 from ..config import settings
 from ..supabase import supabase_admin
 from ..whatsapp_notifications import notify_admin_new_fonepay_order
+from ..firebase_notifications import notify_admin_new_order
 
 
 router = APIRouter(
@@ -902,6 +903,7 @@ def preview_checkout(
 @router.post("/create")
 def create_checkout_order(
     payload: CheckoutRequest,
+    background_tasks: BackgroundTasks,
     current=Depends(get_current_customer),
 ):
     customer = current["customer"]
@@ -1180,6 +1182,10 @@ def create_checkout_order(
         )
 
     created_order = order_response.data[0]
+    background_tasks.add_task(
+        notify_admin_new_order,
+        int(created_order["order_id"]),
+    )
     actual_total = Decimal(str(created_order["total_amount"]))
     amount_to_pay = min(requested_amount_to_pay, actual_total)
     payment_type = (

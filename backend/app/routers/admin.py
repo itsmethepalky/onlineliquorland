@@ -119,6 +119,10 @@ class PaymentStatusUpdate(BaseModel):
     )
 
 
+class AdminPushTokenUpdate(BaseModel):
+    token: str = Field(min_length=32, max_length=4096)
+
+
 class ProductCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -309,6 +313,58 @@ def dashboard(admin=Depends(get_admin_user)):
 # ORDERS
 # ---------------------------------------------------------------------------
 
+@router.post("/push-token", status_code=204)
+def register_admin_push_token(
+    payload: AdminPushTokenUpdate,
+    admin=Depends(get_staff_or_admin_user),
+):
+    try:
+        supabase_admin.table("admin_push_tokens").upsert(
+            {
+                "token": payload.token,
+                "user_id": admin["id"],
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            on_conflict="token",
+        ).execute()
+    except Exception as exc:
+        print(
+            "ADMIN PUSH TOKEN REGISTRATION ERROR:",
+            type(exc).__name__,
+            flush=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Could not register this device for order alerts.",
+        ) from exc
+
+
+@router.post("/push-token/remove", status_code=204)
+def unregister_admin_push_token(
+    payload: AdminPushTokenUpdate,
+    admin=Depends(get_staff_or_admin_user),
+):
+    try:
+        (
+            supabase_admin
+            .table("admin_push_tokens")
+            .delete()
+            .eq("token", payload.token)
+            .eq("user_id", admin["id"])
+            .execute()
+        )
+    except Exception as exc:
+        print(
+            "ADMIN PUSH TOKEN REMOVAL ERROR:",
+            type(exc).__name__,
+            flush=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Could not remove this device's order alerts.",
+        ) from exc
+
+
 @router.get("/orders")
 def list_orders(
     status: Optional[str] = None,
@@ -413,7 +469,7 @@ def get_order(
         supabase_admin
         .table("order_items")
         .select(
-            "id,product_id,quantity,subtotal"
+            "id,product_id,quantity,unit_price,subtotal"
         )
         .eq("order_id", order_id)
         .execute()
