@@ -161,7 +161,7 @@ h4 {
   display: flex;
   align-items: center;
   gap: 14px;
-  color: white;
+  color: black;
 }
 
 .auth-card .brand {
@@ -177,18 +177,20 @@ h4 {
   place-items: center;
   border-radius: 50%;
   background: var(--copper);
-  color: white;
+  color: Black;
   font-size: 24px;
 }
 
 .brand h1 {
   margin: 0;
   font-size: 23px;
+  color: Black;
 }
 
 .brand p {
   margin: 5px 0 0;
   opacity: 0.75;
+  color: black;
   font-size: 13px;
 }
 
@@ -7208,7 +7210,7 @@ textarea:focus {
 .brand-icon,
 .moon-brand-mark {
   background: linear-gradient(145deg, #8b3c46, #4e202a);
-  color: #f8e7c6;
+  color: black;
   box-shadow: 0 8px 22px rgba(78, 32, 42, 0.2);
 }
 
