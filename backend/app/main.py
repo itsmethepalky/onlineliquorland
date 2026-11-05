@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -219,6 +220,40 @@ def public_contact():
         "email": settings.STORE_PUBLIC_EMAIL.strip(),
         "phone": settings.STORE_CONTACT_PHONE.strip(),
     }
+
+
+def _firebase_messaging_public_config():
+    if not settings.firebase_web_configured():
+        return {
+            "configured": False,
+            "firebaseConfig": None,
+        }
+
+    return {
+        "configured": True,
+        "firebaseConfig": settings.firebase_web_config(),
+        "vapidKey": settings.FIREBASE_WEB_VAPID_KEY,
+    }
+
+
+@app.get("/api/firebase-messaging-config")
+def firebase_messaging_public_config():
+    return _firebase_messaging_public_config()
+
+
+@app.get("/api/firebase-messaging-config.js")
+def firebase_messaging_service_worker_config():
+    config = _firebase_messaging_public_config()
+    script = (
+        "self.firebaseMessagingPublicConfig = "
+        + json.dumps(config, separators=(",", ":"))
+        + ";"
+    )
+    return Response(
+        content=script,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/robots.txt", response_class=PlainTextResponse)

@@ -1,12 +1,15 @@
 from decimal import Decimal
 from datetime import datetime, time, timezone
+import hashlib
 from typing import Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Optional
 
 from ..auth import get_current_user
+from ..config import settings
 from ..maintenance import (
     get_maintenance_status,
     invalidate_maintenance_schedules_cache,
@@ -121,6 +124,33 @@ class PaymentStatusUpdate(BaseModel):
 
 class AdminPushTokenUpdate(BaseModel):
     token: str = Field(min_length=32, max_length=4096)
+    device_id: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
+    platform: Literal["web", "android", "ios"] = "android"
+
+
+class AdminPushTokenRemove(BaseModel):
+    token: Optional[str] = Field(
+        default=None,
+        min_length=32,
+        max_length=4096,
+    )
+    device_id: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
+
+    @model_validator(mode="after")
+    def require_token_or_device(self):
+        if not self.token and not self.device_id:
+            raise ValueError("A token or device ID is required.")
+        return self
 
 
 class ProductCreate(BaseModel):
@@ -160,10 +190,6 @@ class ProductCreate(BaseModel):
     reorder_level: int = Field(
         default=0,
         ge=0,
-    )
-    image_url: Optional[str] = Field(
-        default=None,
-        max_length=2048,
     )
     is_active: bool = True
 
@@ -205,10 +231,6 @@ class ProductUpdate(BaseModel):
         default=None,
         ge=0,
     )
-    image_url: Optional[str] = Field(
-        default=None,
-        max_length=2048,
-    )
     is_active: Optional[bool] = None
 
 
@@ -220,6 +242,22 @@ class StockAdjustment(BaseModel):
         ge=-1_000_000,
         le=1_000_000,
     )
+
+
+class ProductImageCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    storage_path: str = Field(
+        min_length=1,
+        max_length=512,
+        pattern=r"^\d+/[A-Za-z0-9._-]+$",
+    )
+
+
+class TaxonomyCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
 
 
 # ---------------------------------------------------------------------------
@@ -316,43 +354,102 @@ def dashboard(admin=Depends(get_admin_user)):
 @router.post("/push-token", status_code=204)
 def register_admin_push_token(
     payload: AdminPushTokenUpdate,
-    admin=Depends(get_staff_or_admin_user),
+    admin=Depends(get_admin_user),
 ):
+    device_id = payload.device_id or (
+        "legacy-"
+        + hashlib.sha256(payload.token.encode("utf-8")).hexdigest()[:32]
+    )
+
     try:
         supabase_admin.table("admin_push_tokens").upsert(
             {
                 "token": payload.token,
                 "user_id": admin["id"],
+                "browser_id": device_id,
+                "platform": payload.platform,
+                "role": "admin",
+                "is_active": True,
+                "admin_notification_eligible": True,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             },
-            on_conflict="token",
+            on_conflict="user_id,browser_id",
         ).execute()
     except Exception as exc:
+        message = str(exc).lower()
         print(
             "ADMIN PUSH TOKEN REGISTRATION ERROR:",
             type(exc).__name__,
             flush=True,
         )
+        if "duplicate key" in message or "unique constraint" in message:
+            raise HTTPException(
+                status_code=409,
+                detail="This notification token is already registered to another device.",
+            ) from exc
         raise HTTPException(
             status_code=503,
             detail="Could not register this device for order alerts.",
         ) from exc
 
 
-@router.post("/push-token/remove", status_code=204)
-def unregister_admin_push_token(
-    payload: AdminPushTokenUpdate,
-    admin=Depends(get_staff_or_admin_user),
+@router.get("/push-token")
+def admin_push_token_status(
+    device_id: str = Query(min_length=1, max_length=100),
+    admin=Depends(get_admin_user),
 ):
     try:
-        (
+        result = execute_read_with_retry(
+            supabase_admin
+            .table("admin_push_tokens")
+            .select("platform,admin_notification_eligible,is_active")
+            .eq("user_id", admin["id"])
+            .eq("browser_id", device_id)
+            .eq("platform", "web")
+            .eq("role", "admin")
+            .maybe_single(),
+            operation="ADMIN PUSH TOKEN STATUS",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(
+            "ADMIN PUSH TOKEN STATUS ERROR:",
+            type(exc).__name__,
+            flush=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load this device's notification status.",
+        ) from exc
+
+    registration = result.data or {}
+    return {
+        "enabled": bool(
+            registration.get("admin_notification_eligible")
+            and registration.get("is_active")
+        ),
+        "platform": registration.get("platform"),
+    }
+
+
+@router.post("/push-token/remove", status_code=204)
+def unregister_admin_push_token(
+    payload: AdminPushTokenRemove,
+    admin=Depends(get_admin_user),
+):
+    try:
+        query = (
             supabase_admin
             .table("admin_push_tokens")
             .delete()
-            .eq("token", payload.token)
             .eq("user_id", admin["id"])
-            .execute()
         )
+        if payload.device_id:
+            query = query.eq("browser_id", payload.device_id)
+        if payload.token:
+            query = query.eq("token", payload.token)
+        query.execute()
     except Exception as exc:
         print(
             "ADMIN PUSH TOKEN REMOVAL ERROR:",
@@ -853,24 +950,6 @@ def create_product(
             detail="Product name cannot be empty.",
         )
 
-    if data["image_url"] is not None:
-        image_url = data["image_url"].strip()
-
-        if image_url:
-            lowered_url = image_url.lower()
-
-            if lowered_url.startswith(
-                ("javascript:", "data:", "vbscript:")
-            ):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid image URL.",
-                )
-
-            data["image_url"] = image_url
-        else:
-            data["image_url"] = None
-
     existing = None
 
     try:
@@ -992,25 +1071,6 @@ def update_product(
     if "description" in data and data["description"] is not None:
         data["description"] = data["description"].strip() or None
 
-    if "image_url" in data:
-        if data["image_url"] is not None:
-            image_url = data["image_url"].strip()
-
-            if image_url:
-                lowered_url = image_url.lower()
-
-                if lowered_url.startswith(
-                    ("javascript:", "data:", "vbscript:")
-                ):
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Invalid image URL.",
-                    )
-
-                data["image_url"] = image_url
-            else:
-                data["image_url"] = None
-
     if "sku" in data:
         try:
             existing = (
@@ -1090,6 +1150,153 @@ def update_product(
         )
 
     return result.data[0]
+
+
+def _create_taxonomy_record(table: str, payload: TaxonomyCreate):
+    name = payload.name.strip()
+    singular = "category" if table == "categories" else "brand"
+    if not name:
+        raise HTTPException(
+            status_code=400,
+            detail="Name cannot be empty.",
+        )
+
+    try:
+        result = execute_write_safely(
+            supabase_admin
+            .table(table)
+            .insert({"name": name}),
+            operation=f"ADMIN {table.upper()} CREATE",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        message = str(exc).lower()
+        print(
+            f"ADMIN {table.upper()} CREATE ERROR:",
+            repr(exc),
+            flush=True,
+        )
+
+        if "duplicate key" in message or "unique constraint" in message:
+            raise HTTPException(
+                status_code=409,
+                detail=f"{singular.capitalize()} already exists.",
+            )
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not create {singular}.",
+        )
+
+    if not result.data:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not create {singular}.",
+        )
+
+    return result.data[0]
+
+
+@router.post("/categories")
+def create_category(
+    payload: TaxonomyCreate,
+    admin=Depends(get_admin_user),
+):
+    return _create_taxonomy_record("categories", payload)
+
+
+@router.post("/brands")
+def create_brand(
+    payload: TaxonomyCreate,
+    admin=Depends(get_admin_user),
+):
+    return _create_taxonomy_record("brands", payload)
+
+
+@router.post("/products/{product_id}/images")
+def create_product_image(
+    product_id: int,
+    payload: ProductImageCreate,
+    admin=Depends(get_admin_user),
+):
+    if product_id <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid product ID.",
+        )
+
+    storage_path = payload.storage_path
+    if not storage_path.startswith(f"{product_id}/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Image path does not match the product.",
+        )
+
+    product = execute_read_with_retry(
+        supabase_admin
+        .table("products")
+        .select("id")
+        .eq("id", product_id)
+        .maybe_single(),
+        operation="ADMIN PRODUCT IMAGE CHECK",
+    )
+    if not product.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Product not found.",
+        )
+
+    image_url = (
+        f"{settings.SUPABASE_URL.rstrip('/')}"
+        f"/storage/v1/object/public/product-images/"
+        f"{quote(storage_path, safe='/')}"
+    )
+
+    try:
+        inserted = execute_write_safely(
+            supabase_admin
+            .table("product_images")
+            .insert({
+                "product_id": product_id,
+                "storage_path": storage_path,
+                "image_url": image_url,
+                "is_primary": True,
+                "sort_order": 0,
+            }),
+            operation="ADMIN PRODUCT IMAGE CREATE",
+        )
+
+        if not inserted.data:
+            raise HTTPException(
+                status_code=500,
+                detail="Could not save product image.",
+            )
+
+        image = inserted.data[0]
+
+        execute_write_safely(
+            supabase_admin
+            .table("product_images")
+            .update({"is_primary": False})
+            .eq("product_id", product_id)
+            .neq("id", image["id"]),
+            operation="ADMIN PRODUCT IMAGE PRIMARY UPDATE",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(
+            "ADMIN PRODUCT IMAGE ERROR:",
+            repr(exc),
+            flush=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save product image.",
+        )
+
+    return image
 
 
 # ---------------------------------------------------------------------------

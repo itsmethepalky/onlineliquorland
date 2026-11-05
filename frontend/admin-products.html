@@ -6,11 +6,14 @@
   <meta name="robots" content="noindex,nofollow">
 
   <title>Products — Admin | ONLINE LIQUOR LAND</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/store.css">
   <link rel="stylesheet"
         href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
-<body class="store-body">
+<body class="store-body admin-layout">
 
 <header class="store-header">
   <div class="store-header-inner">
@@ -37,11 +40,115 @@
     <div>
       <span class="eyebrow">Administration</span>
       <h1>Products & Inventory</h1>
-      <p>Monitor stock and update product information.</p>
+      <p>Manage your catalog, pricing, images and inventory.</p>
     </div>
+    <button class="button primary" id="addProductButton" type="button">
+      <i class="bi bi-plus-lg"></i>
+      Add product
+    </button>
   </div>
 
   <div id="adminError" class="notice error hidden"></div>
+  <div id="adminSuccess" class="notice success hidden" role="status"></div>
+
+  <section id="productEditor" class="admin-panel hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="productEditorTitle">
+    <div class="admin-product-editor-dialog">
+      <div class="admin-panel-heading">
+        <div>
+          <span class="eyebrow">Catalog</span>
+          <h2 id="productEditorTitle">Add product</h2>
+        </div>
+        <button class="button secondary" id="closeProductEditor" type="button" aria-label="Close product form">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+
+      <form id="productForm" class="admin-product-form">
+        <input id="productId" type="hidden">
+
+        <div class="admin-product-form-grid">
+        <label class="admin-field">
+          <span>Product name</span>
+          <input id="productName" name="name" type="text" maxlength="200" required>
+        </label>
+
+        <label class="admin-field">
+          <span>SKU</span>
+          <input id="productSku" name="sku" type="text" maxlength="100" required>
+        </label>
+
+        <div class="admin-field">
+          <label for="productCategory">Category</label>
+          <div class="admin-taxonomy-control">
+            <select id="productCategory">
+              <option value="">No category</option>
+            </select>
+            <button class="button secondary" id="showCategoryCreate" type="button">Add</button>
+          </div>
+          <div id="newCategoryRow" class="admin-taxonomy-create hidden">
+            <input id="newCategoryName" type="text" maxlength="120" placeholder="New category name" aria-label="New category name">
+            <button class="button secondary" id="createCategoryButton" type="button">Save</button>
+          </div>
+        </div>
+
+        <div class="admin-field">
+          <label for="productBrand">Brand</label>
+          <div class="admin-taxonomy-control">
+            <select id="productBrand">
+              <option value="">No brand</option>
+            </select>
+            <button class="button secondary" id="showBrandCreate" type="button">Add</button>
+          </div>
+          <div id="newBrandRow" class="admin-taxonomy-create hidden">
+            <input id="newBrandName" type="text" maxlength="120" placeholder="New brand name" aria-label="New brand name">
+            <button class="button secondary" id="createBrandButton" type="button">Save</button>
+          </div>
+        </div>
+
+        <label class="admin-field">
+          <span>Selling price (Rs.)</span>
+          <input id="productPrice" name="unit_price" type="number" min="0" step="0.01" required>
+        </label>
+
+        <label class="admin-field">
+          <span>Cost price (Rs.)</span>
+          <input id="productCost" name="cost_price" type="number" min="0" step="0.01" value="0" required>
+        </label>
+
+        <label class="admin-field">
+          <span>Stock quantity</span>
+          <input id="productStock" name="stock_quantity" type="number" min="0" step="1" value="0" required>
+        </label>
+
+        <label class="admin-field">
+          <span>Reorder level</span>
+          <input id="productReorderLevel" name="reorder_level" type="number" min="0" step="1" value="5" required>
+        </label>
+
+        <label class="admin-field admin-product-image-field">
+          <span>Product image</span>
+          <input id="productImage" name="image" type="file" accept="image/jpeg,image/png,image/webp">
+          <small>JPG, PNG or WebP; up to 5 MB. A new image becomes the product's primary gallery image.</small>
+          <span id="productImagePreview" class="admin-product-image-preview hidden"></span>
+        </label>
+
+        <label class="admin-field admin-product-description-field">
+          <span>Description</span>
+          <textarea id="productDescription" name="description" rows="4" maxlength="2000" placeholder="Product details"></textarea>
+        </label>
+        </div>
+
+        <div id="productFormError" class="notice error hidden" role="alert"></div>
+        <div class="admin-product-form-actions">
+          <button class="button secondary" id="cancelProductEdit" type="button">Cancel</button>
+          <button class="button primary" id="saveProductButton" type="submit">
+            <i class="bi bi-check2"></i>
+            Save product
+          </button>
+        </div>
+      </form>
+    </div>
+  </section>
 
   <section class="admin-toolbar">
     <div class="admin-search">
@@ -54,6 +161,11 @@
     <label class="check-control">
       <input id="lowStockOnly" type="checkbox">
       <span>Low stock only</span>
+    </label>
+
+    <label class="check-control">
+      <input id="includeInactive" type="checkbox">
+      <span>Include archived</span>
     </label>
 
     <button class="button secondary" id="refreshButton">
@@ -78,6 +190,7 @@
 
 </main>
 
+<script src="/js/admin-layout.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/js/supabase.js"></script>
   <script src="/js/auth-guard.js"></script>
@@ -85,10 +198,12 @@
 
 <script>
 let products = [];
+let categories = [];
+let brands = [];
+let previewObjectUrl = null;
 
 async function api(url, options = {}) {
   const response = await window.adminFetch(url, options);
-
   const responseText = await response.text();
   let body = {};
 
@@ -110,6 +225,7 @@ async function api(url, options = {}) {
 
   return responseText ? body : null;
 }
+
 function money(value) {
   return "Rs. " + Number(value || 0).toLocaleString("en-NP", {
     minimumFractionDigits: 2,
@@ -126,35 +242,67 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function showNotice(id, message) {
+  const box = document.getElementById(id);
+  box.textContent = message;
+  box.classList.remove("hidden");
+}
+
+function hideNotice(id) {
+  document.getElementById(id).classList.add("hidden");
+}
+
+function renderTaxonomyOptions() {
+  const categorySelect = document.getElementById("productCategory");
+  const brandSelect = document.getElementById("productBrand");
+  const categoryValue = categorySelect.value;
+  const brandValue = brandSelect.value;
+
+  categorySelect.innerHTML =
+    '<option value="">No category</option>' +
+    categories.map(category =>
+      `<option value="${category.id}">${escapeHtml(category.name)}</option>`
+    ).join("");
+
+  brandSelect.innerHTML =
+    '<option value="">No brand</option>' +
+    brands.map(brand =>
+      `<option value="${brand.id}">${escapeHtml(brand.name)}</option>`
+    ).join("");
+
+  categorySelect.value = categoryValue;
+  brandSelect.value = brandValue;
+}
+
 function renderProducts() {
   const search =
-    document.getElementById("searchInput")
-      .value.trim().toLowerCase();
-
-  const lowOnly =
-    document.getElementById("lowStockOnly").checked;
-
+    document.getElementById("searchInput").value.trim().toLowerCase();
+  const lowOnly = document.getElementById("lowStockOnly").checked;
   const filtered = products.filter(product => {
     if (search) {
-      const text =
-        `${product.name} ${product.sku}`.toLowerCase();
-
+      const categoryName = categories.find(item =>
+        String(item.id) === String(product.category_id)
+      )?.name;
+      const brandName = brands.find(item =>
+        String(item.id) === String(product.brand_id)
+      )?.name;
+      const text = [
+        product.name,
+        product.sku,
+        brandName,
+        categoryName
+      ].join(" ").toLowerCase();
       if (!text.includes(search)) return false;
     }
 
-    if (lowOnly &&
-        product.stock_quantity > product.reorder_level) {
+    if (lowOnly && product.stock_quantity > product.reorder_level) {
       return false;
     }
-
     return true;
   });
 
-  document.getElementById("productCount").textContent =
-    filtered.length;
-
-  const container =
-    document.getElementById("productsList");
+  document.getElementById("productCount").textContent = filtered.length;
+  const container = document.getElementById("productsList");
 
   if (!filtered.length) {
     container.innerHTML =
@@ -163,18 +311,27 @@ function renderProducts() {
   }
 
   container.innerHTML = filtered.map(product => {
-    const low =
-      product.stock_quantity <= product.reorder_level;
+    const low = product.stock_quantity <= product.reorder_level;
+    const categoryName = categories.find(item =>
+      String(item.id) === String(product.category_id)
+    )?.name;
+    const brandName = brands.find(item =>
+      String(item.id) === String(product.brand_id)
+    )?.name;
+    const status = product.is_active
+      ? `<span class="stock-badge ${low ? "warning" : "good"}">
+           <i class="bi ${low ? "bi-exclamation-triangle" : "bi-check-circle"}"></i>
+           ${low ? "Low stock" : "In stock"}
+         </span>`
+      : '<span class="stock-badge warning">Archived</span>';
 
     return `
-      <div class="admin-product-row">
-
+      <div class="admin-product-row ${product.is_active ? "" : "is-archived"}">
         <div class="admin-product-image">
           ${
             product.image_url
-            ? `<img src="${escapeHtml(product.image_url)}"
-                    alt="${escapeHtml(product.name)}">`
-            : `<i class="bi bi-box"></i>`
+              ? `<img src="${escapeHtml(product.image_url)}" alt="${escapeHtml(product.name)}">`
+              : `<i class="bi bi-box"></i>`
           }
         </div>
 
@@ -182,66 +339,417 @@ function renderProducts() {
           <strong>${escapeHtml(product.name)}</strong>
           <small>SKU: ${escapeHtml(product.sku)}</small>
           <span>${money(product.unit_price)}</span>
+          <small>${escapeHtml(brandName || "No brand")} · ${escapeHtml(categoryName || "No category")}</small>
         </div>
 
         <div class="admin-stock">
           <span>Stock</span>
-          <strong class="${low ? "stock-warning" : ""}">
-            ${product.stock_quantity}
-          </strong>
+          <strong class="${low && product.is_active ? "stock-warning" : ""}">${product.stock_quantity}</strong>
           <small>Reorder: ${product.reorder_level}</small>
         </div>
 
         <div class="admin-product-status">
-          ${
-            low
-            ? `<span class="stock-badge warning">
-                 <i class="bi bi-exclamation-triangle"></i>
-                 Low stock
-               </span>`
-            : `<span class="stock-badge good">
-                 <i class="bi bi-check-circle"></i>
-                 In stock
-               </span>`
-          }
+          ${status}
+          <div class="admin-product-actions">
+            <button class="button secondary" type="button" data-edit-product="${product.id}">
+              <i class="bi bi-pencil"></i><span>Edit</span>
+            </button>
+            ${
+              product.is_active
+                ? `<button class="button secondary" type="button" data-archive-product="${product.id}">
+                     <i class="bi bi-archive"></i><span>Delete</span>
+                   </button>`
+                : `<button class="button secondary" type="button" data-restore-product="${product.id}">
+                     <i class="bi bi-arrow-counterclockwise"></i><span>Restore</span>
+                   </button>`
+            }
+          </div>
         </div>
-
       </div>
     `;
   }).join("");
 }
 
 async function loadProducts() {
-  const container =
-    document.getElementById("productsList");
-
-  container.innerHTML =
-    '<div class="loading-state">Loading products...</div>';
+  const container = document.getElementById("productsList");
+  container.innerHTML = '<div class="loading-state">Loading products...</div>';
+  hideNotice("adminError");
 
   try {
-    products = await api("/api/admin/products");
+    const includeInactive = document.getElementById("includeInactive").checked;
+    products = await api(
+      `/api/admin/products?include_inactive=${includeInactive}`
+    );
     renderProducts();
   } catch (error) {
     container.innerHTML = "";
-
-    const box =
-      document.getElementById("adminError");
-
-    box.textContent = error.message;
-    box.classList.remove("hidden");
+    showNotice("adminError", error.message);
   }
 }
 
+async function loadTaxonomy() {
+  const [nextCategories, nextBrands] = await Promise.all([
+    api("/api/categories"),
+    api("/api/brands")
+  ]);
+  categories = nextCategories;
+  brands = nextBrands;
+  renderTaxonomyOptions();
+}
+
+function openProductEditor(product = null) {
+  const editor = document.getElementById("productEditor");
+  const form = document.getElementById("productForm");
+  form.reset();
+  hideNotice("productFormError");
+  hideNotice("adminSuccess");
+  document.getElementById("productId").value = product?.id || "";
+  document.getElementById("productEditorTitle").textContent =
+    product ? "Edit product" : "Add product";
+  document.getElementById("saveProductButton").innerHTML =
+    '<i class="bi bi-check2"></i> Save product';
+  document.getElementById("productStock").value =
+    product?.stock_quantity ?? 0;
+  document.getElementById("productCost").value =
+    product?.cost_price ?? 0;
+  document.getElementById("productReorderLevel").value =
+    product?.reorder_level ?? 5;
+
+  if (product) {
+    document.getElementById("productName").value = product.name || "";
+    document.getElementById("productSku").value = product.sku || "";
+    document.getElementById("productPrice").value = product.unit_price ?? 0;
+    document.getElementById("productDescription").value =
+      product.description || "";
+    document.getElementById("productCategory").value =
+      product.category_id || "";
+    document.getElementById("productBrand").value =
+      product.brand_id || "";
+  }
+
+  renderImagePreview(product?.image_url);
+  editor.setAttribute("aria-hidden", "false");
+  editor.classList.remove("hidden");
+  document.body.classList.add("product-editor-open");
+}
+
+function closeProductEditor() {
+  const editor = document.getElementById("productEditor");
+  editor.classList.add("hidden");
+  editor.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("product-editor-open");
+  document.getElementById("productForm").reset();
+  document.getElementById("productId").value = "";
+  renderImagePreview();
+  hideNotice("productFormError");
+}
+
+function renderImagePreview(imageUrl) {
+  const preview = document.getElementById("productImagePreview");
+  if (previewObjectUrl) {
+    URL.revokeObjectURL(previewObjectUrl);
+    previewObjectUrl = null;
+  }
+  const file = document.getElementById("productImage").files[0];
+  if (file) {
+    previewObjectUrl = URL.createObjectURL(file);
+    preview.innerHTML =
+      `<img src="${previewObjectUrl}" alt="Selected product image">`;
+    preview.classList.remove("hidden");
+    return;
+  }
+  if (imageUrl) {
+    preview.innerHTML =
+      `<img src="${escapeHtml(imageUrl)}" alt="Current product image">`;
+    preview.classList.remove("hidden");
+    return;
+  }
+  preview.replaceChildren();
+  preview.classList.add("hidden");
+}
+
+async function uploadProductImage(productId, file) {
+  const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error("Choose a JPG, PNG or WebP image.");
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("Product images must be 5 MB or smaller.");
+  }
+  if (!window.supabaseClient?.storage) {
+    throw new Error("Image storage is unavailable. Please refresh and try again.");
+  }
+
+  const extension = file.type === "image/jpeg"
+    ? "jpg"
+    : file.type.split("/")[1];
+  const storagePath =
+    `${productId}/${crypto.randomUUID()}.${extension}`;
+  const { data, error } = await window.supabaseClient.storage
+    .from("product-images")
+    .upload(storagePath, file, {
+      cacheControl: "3600",
+      contentType: file.type,
+      upsert: false
+    });
+
+  if (error) {
+    throw new Error(error.message || "Image upload failed.");
+  }
+  if (!data?.path) {
+    throw new Error("Image upload did not return a file path.");
+  }
+
+  try {
+    await api(`/api/admin/products/${productId}/images`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storage_path: data.path })
+    });
+  } catch (error) {
+    const cleanup = await window.supabaseClient.storage
+      .from("product-images")
+      .remove([data.path]);
+    if (cleanup.error) {
+      console.error("PRODUCT IMAGE CLEANUP FAILED:", cleanup.error);
+    }
+    throw error;
+  }
+}
+
+async function saveProduct(event) {
+  event.preventDefault();
+  const submitButton = document.getElementById("saveProductButton");
+  const productId = document.getElementById("productId").value;
+  const originalProduct = products.find(
+    product => String(product.id) === String(productId)
+  );
+  const file = document.getElementById("productImage").files[0];
+  const stockQuantity = Number(document.getElementById("productStock").value);
+  const payload = {
+    name: document.getElementById("productName").value.trim(),
+    sku: document.getElementById("productSku").value.trim(),
+    description: document.getElementById("productDescription").value.trim() || null,
+    category_id: document.getElementById("productCategory").value
+      ? Number(document.getElementById("productCategory").value)
+      : null,
+    brand_id: document.getElementById("productBrand").value
+      ? Number(document.getElementById("productBrand").value)
+      : null,
+    unit_price: Number(document.getElementById("productPrice").value),
+    cost_price: Number(document.getElementById("productCost").value),
+    reorder_level: Number(document.getElementById("productReorderLevel").value)
+  };
+
+  hideNotice("productFormError");
+  if (file && !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    showNotice("productFormError", "Choose a JPG, PNG or WebP image.");
+    return;
+  }
+  if (file && file.size > 5 * 1024 * 1024) {
+    showNotice("productFormError", "Product images must be 5 MB or smaller.");
+    return;
+  }
+  submitButton.disabled = true;
+  submitButton.innerHTML = '<i class="bi bi-hourglass-split"></i> Saving…';
+
+  try {
+    let savedProduct;
+    if (productId) {
+      savedProduct = await api(`/api/admin/products/${productId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const stockAdjustment =
+        stockQuantity - Number(originalProduct?.stock_quantity || 0);
+      if (stockAdjustment !== 0) {
+        await api(`/api/admin/products/${productId}/stock`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ adjustment: stockAdjustment })
+        });
+      }
+    } else {
+      savedProduct = await api("/api/admin/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          stock_quantity: stockQuantity
+        })
+      });
+    }
+
+    if (file) {
+      try {
+        await uploadProductImage(savedProduct.id, file);
+      } catch (error) {
+        await loadProducts();
+        closeProductEditor();
+        showNotice(
+          "adminError",
+          `Product saved, but its image could not be uploaded: ${error.message}`
+        );
+        return;
+      }
+    }
+
+    closeProductEditor();
+    await loadProducts();
+    showNotice(
+      "adminSuccess",
+      productId ? "Product updated successfully." : "Product added successfully."
+    );
+  } catch (error) {
+    if (productId) {
+      await loadProducts();
+    }
+    showNotice("productFormError", error.message);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.innerHTML = '<i class="bi bi-check2"></i> Save product';
+  }
+}
+
+async function createTaxonomy(type) {
+  const isCategory = type === "categories";
+  const input = document.getElementById(
+    isCategory ? "newCategoryName" : "newBrandName"
+  );
+  const name = input.value.trim();
+  if (!name) {
+    input.focus();
+    return;
+  }
+
+  try {
+    const record = await api(`/api/admin/${type}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name })
+    });
+    if (isCategory) {
+      categories.push(record);
+      categories.sort((left, right) => left.name.localeCompare(right.name));
+    } else {
+      brands.push(record);
+      brands.sort((left, right) => left.name.localeCompare(right.name));
+    }
+    renderTaxonomyOptions();
+    document.getElementById(
+      isCategory ? "productCategory" : "productBrand"
+    ).value = record.id;
+    input.value = "";
+    document.getElementById(
+      isCategory ? "newCategoryRow" : "newBrandRow"
+    ).classList.add("hidden");
+  } catch (error) {
+    showNotice("productFormError", error.message);
+  }
+}
+
+async function setProductActive(product, isActive) {
+  const action = isActive ? "restore" : "delete";
+  const message = isActive
+    ? `Restore "${product.name}" to the storefront?`
+    : `Delete "${product.name}" from the storefront? Its order and sales history will be preserved.`;
+  if (!window.confirm(message)) return;
+
+  try {
+    await api(`/api/admin/products/${product.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_active: isActive })
+    });
+    await loadProducts();
+    showNotice(
+      "adminSuccess",
+      isActive ? "Product restored." : "Product deleted from the storefront."
+    );
+  } catch (error) {
+    showNotice("adminError", `Could not ${action} product: ${error.message}`);
+  }
+}
+
+document.getElementById("addProductButton")
+  .addEventListener("click", () => openProductEditor());
+document.getElementById("closeProductEditor")
+  .addEventListener("click", closeProductEditor);
+document.getElementById("cancelProductEdit")
+  .addEventListener("click", closeProductEditor);
+document.getElementById("productForm")
+  .addEventListener("submit", saveProduct);
 document.getElementById("searchInput")
   .addEventListener("input", renderProducts);
-
 document.getElementById("lowStockOnly")
   .addEventListener("change", renderProducts);
-
+document.getElementById("includeInactive")
+  .addEventListener("change", loadProducts);
 document.getElementById("refreshButton")
   .addEventListener("click", loadProducts);
+document.getElementById("productImage")
+  .addEventListener("change", () => renderImagePreview());
+document.getElementById("showCategoryCreate")
+  .addEventListener("click", () => {
+    document.getElementById("newCategoryRow").classList.toggle("hidden");
+    document.getElementById("newCategoryName").focus();
+  });
+document.getElementById("showBrandCreate")
+  .addEventListener("click", () => {
+    document.getElementById("newBrandRow").classList.toggle("hidden");
+    document.getElementById("newBrandName").focus();
+  });
+document.getElementById("createCategoryButton")
+  .addEventListener("click", () => createTaxonomy("categories"));
+document.getElementById("createBrandButton")
+  .addEventListener("click", () => createTaxonomy("brands"));
+document.getElementById("newCategoryName")
+  .addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      createTaxonomy("categories");
+    }
+  });
+document.getElementById("newBrandName")
+  .addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      createTaxonomy("brands");
+    }
+  });
 
-loadProducts();
+document.getElementById("productsList")
+  .addEventListener("click", event => {
+    const button = event.target.closest("button");
+    if (!button) return;
+
+    const editId = button.dataset.editProduct;
+    const archiveId = button.dataset.archiveProduct;
+    const restoreId = button.dataset.restoreProduct;
+    const product = products.find(item =>
+      String(item.id) === String(editId || archiveId || restoreId)
+    );
+    if (!product) return;
+
+    if (editId) {
+      openProductEditor(product);
+    } else {
+      setProductActive(product, Boolean(restoreId));
+    }
+  });
+
+async function initializeProductsPage() {
+  try {
+    await loadTaxonomy();
+  } catch (error) {
+    showNotice("adminError", `Could not load brands and categories: ${error.message}`);
+  }
+  await loadProducts();
+}
+
+initializeProductsPage();
 </script>
 
 </body>

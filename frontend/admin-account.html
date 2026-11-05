@@ -7,6 +7,9 @@
 
   <title>Admin Account — ONLINE LIQUOR LAND</title>
 
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/store.css">
 
   <link rel="stylesheet"
@@ -19,7 +22,7 @@
 
 </head>
 
-<body class="store-body admin-page">
+<body class="store-body admin-page admin-layout">
 
 <header class="store-header">
   <div class="store-header-inner">
@@ -58,7 +61,7 @@
         <span>Customers</span>
       </a>
 
-      <a href="/admin/account" title="Admin Account" aria-label="Admin Account">
+      <a href="/admin/account" class="active" title="Admin Account" aria-label="Admin Account">
         <i class="bi bi-person-circle"></i>
         <span>Account</span>
       </a>
@@ -73,6 +76,34 @@
       <span class="eyebrow">ADMINISTRATION</span>
       <h1>Admin Account</h1>
       <p>Manage and view your administrator profile.</p>
+    </div>
+  </section>
+
+  <section class="admin-panel admin-push-panel">
+    <div class="admin-panel-header">
+      <div>
+        <span class="eyebrow">Notifications</span>
+        <h2>Order alerts on this browser</h2>
+      </div>
+      <span class="admin-push-status" id="adminPushStatus" role="status">
+        Checking notification setup…
+      </span>
+    </div>
+    <p>
+      Enroll this browser to receive new-order alerts, even when you sign out
+      or close the website. Alerts are sent only to browsers explicitly
+      enrolled by active administrator accounts.
+    </p>
+    <div id="adminPushError" class="notice error hidden" role="alert"></div>
+    <div id="adminPushSuccess" class="notice success hidden" role="status"></div>
+    <div class="admin-push-actions">
+      <button type="button" class="btn btn-primary" id="enableAdminPush">
+        <i class="bi bi-bell"></i>
+        Enable order alerts
+      </button>
+      <button type="button" class="btn btn-outline hidden" id="disableAdminPush">
+        Turn off on this browser
+      </button>
     </div>
   </section>
 
@@ -151,6 +182,8 @@
 
 </main>
 
+<script src="/js/admin-layout.js"></script>
+<script src="/js/admin-push.js"></script>
 <script>
 (function () {
   "use strict";
@@ -216,6 +249,8 @@
       document.getElementById("infoRole").textContent = role;
       document.getElementById("infoStatus").textContent =
         active ? "Active" : "Inactive";
+
+      await window.initializeAdminPush();
 
     } catch (error) {
       console.error("ADMIN ACCOUNT:", error);

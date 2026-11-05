@@ -12,6 +12,34 @@ class Settings:
         "SUPABASE_SERVICE_ROLE_KEY",
         "",
     )
+    FIREBASE_WEB_API_KEY: str = os.getenv(
+        "FIREBASE_WEB_API_KEY",
+        "",
+    ).strip()
+    FIREBASE_WEB_AUTH_DOMAIN: str = os.getenv(
+        "FIREBASE_WEB_AUTH_DOMAIN",
+        "",
+    ).strip()
+    FIREBASE_WEB_PROJECT_ID: str = os.getenv(
+        "FIREBASE_WEB_PROJECT_ID",
+        "",
+    ).strip()
+    FIREBASE_WEB_STORAGE_BUCKET: str = os.getenv(
+        "FIREBASE_WEB_STORAGE_BUCKET",
+        "",
+    ).strip()
+    FIREBASE_WEB_MESSAGING_SENDER_ID: str = os.getenv(
+        "FIREBASE_WEB_MESSAGING_SENDER_ID",
+        "",
+    ).strip()
+    FIREBASE_WEB_APP_ID: str = os.getenv(
+        "FIREBASE_WEB_APP_ID",
+        "",
+    ).strip()
+    FIREBASE_WEB_VAPID_KEY: str = os.getenv(
+        "FIREBASE_WEB_VAPID_KEY",
+        "",
+    ).strip()
     OSM_NOMINATIM_URL: str = os.getenv(
         "OSM_NOMINATIM_URL",
         "https://nominatim.openstreetmap.org",
@@ -146,6 +174,30 @@ class Settings:
                 "Missing required environment variables: "
                 + ", ".join(missing)
             )
+
+    def firebase_web_config(self):
+        return {
+            "apiKey": self.FIREBASE_WEB_API_KEY,
+            "authDomain": self.FIREBASE_WEB_AUTH_DOMAIN,
+            "projectId": self.FIREBASE_WEB_PROJECT_ID,
+            "storageBucket": self.FIREBASE_WEB_STORAGE_BUCKET,
+            "messagingSenderId": self.FIREBASE_WEB_MESSAGING_SENDER_ID,
+            "appId": self.FIREBASE_WEB_APP_ID,
+        }
+
+    def firebase_web_configured(self):
+        config = self.firebase_web_config()
+        return all(
+            config[key]
+            for key in (
+                "apiKey",
+                "authDomain",
+                "projectId",
+                "messagingSenderId",
+                "appId",
+                "vapidKey",
+            )
+        )
 
 
 settings = Settings()

@@ -6,11 +6,14 @@
   <meta name="robots" content="noindex,nofollow">
 
   <title>Order — Admin | ONLINE LIQUOR LAND</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/store.css">
   <link rel="stylesheet"
         href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
-<body class="store-body">
+<body class="store-body admin-layout">
 
 <header class="store-header">
   <div class="store-header-inner">
@@ -33,7 +36,7 @@
         <span>Store</span>
       </a>
 
-      <a href="/admin/orders" title="Orders" aria-label="Orders">
+      <a href="/admin/orders" class="active" title="Orders" aria-label="Orders">
         <i class="bi bi-box-seam"></i>
         <span>Orders</span>
       </a>
@@ -258,6 +261,7 @@
 
 </main>
 
+<script src="/js/admin-layout.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/js/supabase.js"></script>
   <script src="/js/auth-guard.js"></script>

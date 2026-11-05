@@ -83,6 +83,7 @@ then apply these checkout migrations in this order:
 16. `database/migrations/026_store_maintenance_mode.sql`
 17. `database/migrations/027_multiple_maintenance_schedules.sql`
 18. `database/migrations/028_admin_fcm_tokens.sql`
+19. `database/migrations/029_admin_web_push.sql`
 
 The checkout migrations define the seven-argument checkout function; the
 server-side promotions migration also drops the obsolete six-argument version.
@@ -140,27 +141,57 @@ so retries and returning to checkout reopen the existing Fonepay order and QR
 instead of creating another order for the same cart. Apply it after migration
 024 before deploying the matching backend.
 
-## Admin Android push alerts for new orders
+## Admin browser push alerts for new orders
 
-The Android admin/staff app uses Firebase Cloud Messaging data messages to
-show a separate high-importance notification for each newly created order,
-including while the app is backgrounded or closed. The former persistent
-foreground order-monitor notification has been removed. Android notification
-permission and the user's notification-channel, silent-mode, and Do Not Disturb
-settings remain authoritative; the app cannot force sound when Android or the
-user suppresses it.
+After an admin explicitly enables order alerts in **Admin → Account**, that
+browser receives Firebase Cloud Messaging web-push notifications for newly
+created customer orders. Alerts can arrive while the site is open, in another
+tab, or closed, and remain enrolled after the admin signs out. Only active
+admin accounts and opted-in web browsers are eligible; customer browsers and
+staff devices are excluded. Clicking an alert opens its admin order detail
+route, which asks the admin to sign in again if needed. The service worker
+handles background messages, and the database tracks delivery per order and
+browser to prevent duplicate alerts.
 
-For Android, add the Firebase project's `google-services.json` to
-`BluemoonStore3/app/google-services.json` (the registered Android package must
-be `com.onlineliquorland.store`) and rebuild. For the backend, apply
-`database/migrations/028_admin_fcm_tokens.sql`, install the added
-`firebase-admin` requirement, and configure `FIREBASE_SERVICE_ACCOUNT_JSON`
-with the Firebase service-account JSON in the host's secret environment
-settings. Use a service account from the same Firebase project; do not commit
-the service-account key or put it in Android resources. Admin/staff devices
-register their FCM tokens through an authenticated endpoint. A newly created
-checkout order triggers a best-effort push; notification delivery requires
-Firebase configuration and granted device notification permission.
+Apply migrations 028 and 029. Configure the following public Firebase Web App
+values in the backend environment; these values identify the Firebase project
+and are delivered to the browser:
+
+- `FIREBASE_WEB_API_KEY`
+- `FIREBASE_WEB_AUTH_DOMAIN`
+- `FIREBASE_WEB_PROJECT_ID`
+- `FIREBASE_WEB_STORAGE_BUCKET` (optional)
+- `FIREBASE_WEB_MESSAGING_SENDER_ID`
+- `FIREBASE_WEB_APP_ID`
+- `FIREBASE_WEB_VAPID_KEY` (the Web Push certificate's public key)
+
+Deployment:
+
+1. Apply migration 029 after 028 on the target Supabase project (or apply all
+   pending database migrations in their documented order).
+2. Set the Firebase Web values in the backend host's environment and redeploy
+   the backend.
+3. In Supabase's Edge Function secrets, add `FIREBASE_SERVICE_ACCOUNT_JSON`
+   with the service-account JSON from the same Firebase project. Supabase
+   provides `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and
+   `SUPABASE_SERVICE_ROLE_KEY` to Edge Functions. Keep the Firebase private
+   key and Supabase service-role key only in server-side secret settings.
+4. Link the Supabase CLI to the target project, then from the repository root
+   run `supabase functions deploy notify-admin-new-order`. The checked-in
+   `supabase/config.toml` enables JWT verification for this Function.
+5. Serve the website over HTTPS, sign in as an active admin, and enable alerts
+   under **Admin → Account** on each browser that should receive them.
+
+The backend uses its existing service-role key to invoke the Function after
+creating an order. Never put service credentials in frontend code or commit
+them.
+
+The Firebase Web App API key and VAPID public key are not service credentials.
+The Edge Function verifies that its caller has the Supabase `service_role`
+claim, then independently checks each registered device's stored admin role
+and current active admin profile before sending through FCM HTTP v1. The
+service-account private key is used only by the Edge Function. Notification
+permission and browser support are required; delivery is best-effort.
 
 ## Admin WhatsApp order notifications
 
