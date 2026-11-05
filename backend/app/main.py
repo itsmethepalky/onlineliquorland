@@ -1,8 +1,11 @@
 import json
+from html import escape as escape_html
+import math
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
 from xml.sax.saxutils import escape
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from datetime import datetime, timezone
@@ -564,6 +567,178 @@ def serve_page(filename: str):
     return FileResponse(FRONTEND_DIR / filename)
 
 
+def render_product_page(product: dict | None = None) -> HTMLResponse:
+    site_url = settings.SEO_SITE_URL.rstrip("/")
+    is_product_page = product is not None
+    product_name = str(product.get("name") or "Product") if product else "Product"
+    canonical_url = (
+        f"{site_url}/product/{product_slug(product_name)}"
+        if product
+        else f"{site_url}/product"
+    )
+    description = (
+        " ".join(str(product.get("description") or "").split())
+        if product
+        else ""
+    ) or (
+        f"Shop {product_name} online at ONLINE LIQUOR LAND. "
+        "View current product details and availability."
+        if product
+        else "Explore product details and availability at ONLINE LIQUOR LAND. "
+        "Browse wines, spirits, and favorites online."
+    )
+    if len(description) > 155:
+        shortened_description = description[:152].rsplit(" ", 1)[0].rstrip()
+        meta_description = (shortened_description or description[:152].rstrip()) + "..."
+    else:
+        meta_description = description
+    image_urls = []
+    if product:
+        for image in product.get("images", []):
+            image_url = image.get("image_url")
+            if not image_url:
+                continue
+            absolute_url = urljoin(site_url + "/", str(image_url))
+            if urlparse(absolute_url).scheme in {"http", "https"}:
+                image_urls.append(absolute_url)
+
+    price = None
+    if product and product.get("unit_price") is not None:
+        try:
+            numeric_price = float(product["unit_price"])
+            if math.isfinite(numeric_price) and numeric_price >= 0:
+                price = f"{numeric_price:.2f}"
+            else:
+                print(
+                    "PRODUCT SEO: omitted offer because unit price is invalid",
+                    flush=True,
+                )
+        except (TypeError, ValueError):
+            print(
+                "PRODUCT SEO: omitted offer because unit price is invalid",
+                flush=True,
+            )
+
+    product_data = None
+    breadcrumb_data = None
+    if product:
+        product_data = {
+            "@context": "https://schema.org",
+            "@type": "Product",
+            "name": product_name,
+            "description": description,
+            "url": canonical_url,
+            "mainEntityOfPage": canonical_url,
+        }
+        if image_urls:
+            product_data["image"] = image_urls
+        if product.get("brand_name"):
+            product_data["brand"] = {
+                "@type": "Brand",
+                "name": str(product["brand_name"]),
+            }
+        if product.get("category_name"):
+            product_data["category"] = str(product["category_name"])
+        if price is not None:
+            product_data["offers"] = {
+                "@type": "Offer",
+                "priceCurrency": "NPR",
+                "price": price,
+                "availability": (
+                    "https://schema.org/InStock"
+                    if int(product.get("stock_quantity") or 0) > 0
+                    else "https://schema.org/OutOfStock"
+                ),
+                "itemCondition": "https://schema.org/NewCondition",
+                "url": canonical_url,
+                "seller": {
+                    "@type": "Organization",
+                    "name": "ONLINE LIQUOR LAND",
+                },
+            }
+        breadcrumb_data = {
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+                {
+                    "@type": "ListItem",
+                    "position": 1,
+                    "name": "Home",
+                    "item": f"{site_url}/",
+                },
+                {
+                    "@type": "ListItem",
+                    "position": 2,
+                    "name": "Shop",
+                    "item": f"{site_url}/shop",
+                },
+                {
+                    "@type": "ListItem",
+                    "position": 3,
+                    "name": product_name,
+                    "item": canonical_url,
+                },
+            ],
+        }
+
+    structured_data = ""
+    if product_data is not None:
+        structured_data += (
+            '<script id="productStructuredData" type="application/ld+json">'
+            + json.dumps(
+                product_data,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).replace("<", "\\u003c")
+            + "</script>"
+        )
+    if breadcrumb_data is not None:
+        structured_data += (
+            '<script type="application/ld+json">'
+            + json.dumps(
+                breadcrumb_data,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).replace("<", "\\u003c")
+            + "</script>"
+        )
+    fallback_image = f"{site_url}/favicon-48x48.png"
+    page_title = (
+        f"{product_name} — ONLINE LIQUOR LAND"
+        if product
+        else "Product — ONLINE LIQUOR LAND"
+    )
+    meta_title = (
+        f"{product_name} | ONLINE LIQUOR LAND"
+        if product
+        else "Product | ONLINE LIQUOR LAND"
+    )
+    image_alt = (
+        f"{product_name} product image"
+        if product and image_urls
+        else "ONLINE LIQUOR LAND"
+    )
+    safe_values = {
+        "__PRODUCT_META_DESCRIPTION__": escape_html(meta_description, quote=True),
+        "__PRODUCT_CANONICAL_URL__": escape_html(canonical_url, quote=True),
+        "__PRODUCT_ROBOTS__": "index,follow" if is_product_page else "noindex,follow",
+        "__PRODUCT_META_TITLE__": escape_html(meta_title, quote=True),
+        "__PRODUCT_TITLE__": escape_html(page_title, quote=True),
+        "__PRODUCT_IMAGE_URL__": escape_html(
+            image_urls[0] if image_urls else fallback_image,
+            quote=True,
+        ),
+        "__PRODUCT_IMAGE_ALT__": escape_html(image_alt, quote=True),
+        "__PRODUCT_PRICE__": price or "",
+    }
+    html = (FRONTEND_DIR / "product.html").read_text(encoding="utf-8")
+    for placeholder, value in safe_values.items():
+        html = html.replace(placeholder, value)
+    if structured_data:
+        html = html.replace("</head>", structured_data + "</head>", 1)
+    return HTMLResponse(content=html)
+
+
 @app.get("/", include_in_schema=False)
 def frontend_home():
     return serve_page("index.html")
@@ -625,13 +800,23 @@ def frontend_terms_and_conditions():
 
 
 @app.get("/product", include_in_schema=False)
-def frontend_product():
-    return serve_page("product.html")
+def frontend_product(request: Request):
+    product_id = request.query_params.get("id")
+    if product_id is not None:
+        try:
+            parsed_product_id = int(product_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Product not found")
+        if parsed_product_id <= 0:
+            raise HTTPException(status_code=404, detail="Product not found")
+        return render_product_page(catalog.get_product(parsed_product_id))
+    return render_product_page()
 
 
 @app.get("/product/{slug}", include_in_schema=False)
 def frontend_product_by_slug(slug: str):
-    return serve_page("product.html")
+    product = catalog.get_product_by_slug(slug)
+    return render_product_page(product)
 
 
 @app.get("/cart", include_in_schema=False)

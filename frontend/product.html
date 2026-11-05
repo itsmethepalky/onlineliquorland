@@ -4,16 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <meta name="description" content="Explore product details and availability at ONLINE LIQUOR LAND. Browse wines, spirits, and favorites, and review product information before ordering.">
-  <meta name="robots" content="index,follow">
-  <link rel="canonical" href="https://onlineliquorland.com/product">
+  <meta name="description" content="__PRODUCT_META_DESCRIPTION__">
+  <meta name="robots" content="__PRODUCT_ROBOTS__">
+  <link rel="canonical" href="__PRODUCT_CANONICAL_URL__">
   <meta property="og:type" content="product">
   <meta property="og:site_name" content="ONLINE LIQUOR LAND">
-  <meta property="og:title" content="Product | ONLINE LIQUOR LAND">
-  <meta property="og:description" content="Explore product details and availability at ONLINE LIQUOR LAND. Browse wines, spirits, and favorites online.">
-  <meta property="og:url" content="https://onlineliquorland.com/product">
-  <meta name="twitter:card" content="summary">
-  <title>Product — ONLINE LIQUOR LAND</title>
+  <meta property="og:title" content="__PRODUCT_META_TITLE__">
+  <meta property="og:description" content="__PRODUCT_META_DESCRIPTION__">
+  <meta property="og:url" content="__PRODUCT_CANONICAL_URL__">
+  <meta property="og:image" content="__PRODUCT_IMAGE_URL__">
+  <meta property="og:image:alt" content="__PRODUCT_IMAGE_ALT__">
+  <meta property="product:price:amount" content="__PRODUCT_PRICE__">
+  <meta property="product:price:currency" content="NPR">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="__PRODUCT_META_TITLE__">
+  <meta name="twitter:description" content="__PRODUCT_META_DESCRIPTION__">
+  <meta name="twitter:image" content="__PRODUCT_IMAGE_URL__">
+  <meta name="twitter:image:alt" content="__PRODUCT_IMAGE_ALT__">
+  <title>__PRODUCT_TITLE__</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 
   <link rel="stylesheet" href="/css/store.css">
@@ -532,44 +540,88 @@ function renderProduct(product) {
   document.title =
     `${product.name} — ONLINE LIQUOR LAND`;
 
-  const seoDescription = String(
+  const productDescriptionText = String(
     product.description ||
     `Shop ${product.name} online at ONLINE LIQUOR LAND. View current product details and availability.`
-  ).replace(/\s+/g, " ").trim().slice(0, 155);
+  ).replace(/\s+/g, " ").trim();
+  const descriptionExcerpt = productDescriptionText.slice(0, 152);
+  const shortenedDescription = descriptionExcerpt
+    .replace(/\s+\S*$/, "")
+    .trim();
+  const seoDescription = productDescriptionText.length > 155
+    ? `${shortenedDescription || descriptionExcerpt.trim()}...`
+    : productDescriptionText;
   document.querySelector('meta[name="description"]').content =
     seoDescription;
   document.querySelector('meta[property="og:title"]').content =
     `${product.name} | ONLINE LIQUOR LAND`;
   document.querySelector('meta[property="og:description"]').content =
     seoDescription;
+  document.querySelector('meta[name="twitter:title"]').content =
+    `${product.name} | ONLINE LIQUOR LAND`;
+  document.querySelector('meta[name="twitter:description"]').content =
+    seoDescription;
   const canonicalUrl =
+    document.querySelector('link[rel="canonical"]').href ||
     `${window.location.origin}${productUrl(product)}`;
   document.querySelector('link[rel="canonical"]').href = canonicalUrl;
   document.querySelector('meta[property="og:url"]').content = canonicalUrl;
+  const productImages = (product.images || [])
+    .map(image => {
+      try {
+        const url = new URL(image.image_url, window.location.origin);
+        return ["http:", "https:"].includes(url.protocol)
+          ? url.href
+          : null;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  if (productImages.length) {
+    document.querySelector('meta[property="og:image"]').content =
+      productImages[0];
+    document.querySelector('meta[property="og:image:alt"]').content =
+      `${product.name} product image`;
+    document.querySelector('meta[name="twitter:image"]').content =
+      productImages[0];
+    document.querySelector('meta[name="twitter:image:alt"]').content =
+      `${product.name} product image`;
+  }
+  const numericPrice = Number(product.unit_price);
+  const hasValidPrice = product.unit_price !== null &&
+    product.unit_price !== undefined &&
+    String(product.unit_price).trim() !== "" &&
+    Number.isFinite(numericPrice) &&
+    numericPrice >= 0;
+  document.querySelector('meta[property="product:price:amount"]').content =
+    hasValidPrice ? numericPrice.toFixed(2) : "";
   const productStructuredData = {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.name,
-    description: seoDescription,
+    description: productDescriptionText,
     url: canonicalUrl,
+    mainEntityOfPage: canonicalUrl,
+    image: productImages.length ? productImages : undefined,
+    category: product.category_name || undefined,
     brand: product.brand_name
       ? { "@type": "Brand", name: product.brand_name }
       : undefined,
-    offers: {
+    offers: hasValidPrice ? {
       "@type": "Offer",
       priceCurrency: "NPR",
-      price: Number.isFinite(Number(product.unit_price))
-        ? Number(product.unit_price).toFixed(2)
-        : undefined,
+      price: numericPrice.toFixed(2),
       availability: Number(product.stock_quantity) > 0
         ? "https://schema.org/InStock"
         : "https://schema.org/OutOfStock",
+      itemCondition: "https://schema.org/NewCondition",
       url: canonicalUrl,
       seller: {
         "@type": "Organization",
         name: "ONLINE LIQUOR LAND"
       }
-    }
+    } : undefined
   };
   let structuredDataScript =
     document.getElementById("productStructuredData");
