@@ -76,10 +76,10 @@ def notify_admin_new_order(order_id: int) -> None:
         )
         return
 
-    if result.get("failed"):
-        print(
-            "ADMIN ORDER PUSH PARTIAL FAILURE:",
-            f"sent={result.get('sent', 0)}",
-            f"failed={result['failed']}",
-            flush=True,
-        )
+    print(
+        "ADMIN ORDER PUSH RESULT:",
+        f"sent={result.get('sent', 0)}",
+        f"skipped={result.get('skipped', 0)}",
+        f"failed={result.get('failed', 0)}",
+        flush=True,
+    )
