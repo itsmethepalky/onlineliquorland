@@ -523,7 +523,11 @@ def create_fonepay_qr(
             ),
         ) from exc
 
-    attempt = existing_response.data
+    attempt = (
+        existing_response.data
+        if existing_response is not None
+        else None
+    )
     amount_to_pay = (
         Decimal(str(attempt["expected_amount"]))
         if attempt

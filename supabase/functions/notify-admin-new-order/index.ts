@@ -8,7 +8,6 @@ const corsHeaders = {
 };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const firebaseServiceAccountJson =
   Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON") ?? "";
@@ -19,13 +18,6 @@ const adminClient = createClient(supabaseUrl, serviceRoleKey, {
     persistSession: false,
   },
 });
-const claimsClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
-
 type FirebaseServiceAccount = {
   client_email: string;
   private_key: string;
@@ -172,7 +164,6 @@ Deno.serve(async (request: Request) => {
 
   if (
     !supabaseUrl ||
-    !supabaseAnonKey ||
     !serviceRoleKey ||
     !firebaseServiceAccountJson
   ) {
@@ -186,10 +177,8 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(401, { error: "Unauthorized." });
   }
 
-  const { data: claimData, error: claimsError } =
-    await claimsClient.auth.getClaims(bearerMatch[1]);
-  const claims = claimData?.claims;
-  if (claimsError || claims?.role !== "service_role") {
+  // The Supabase gateway verifies this JWT before invoking the function.
+  if (bearerMatch[1] !== serviceRoleKey) {
     return jsonResponse(403, { error: "Service access required." });
   }
 
