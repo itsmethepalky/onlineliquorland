@@ -38,9 +38,31 @@ def notify_admin_new_order(order_id: int) -> None:
         return
 
     if not response.is_success:
+        known_errors = {
+            "Push notification service is not configured.",
+            "Could not load the order.",
+            "Could not load push registrations.",
+            "Could not verify admin registrations.",
+            "Firebase is not configured correctly.",
+            "Firebase authorization failed.",
+        }
+        try:
+            response_body = response.json()
+        except ValueError:
+            response_body = None
+
+        error_message = (
+            response_body.get("error")
+            if isinstance(response_body, dict)
+            else None
+        )
+        if error_message not in known_errors:
+            error_message = "unclassified function response"
+
         print(
             "ADMIN ORDER PUSH FUNCTION ERROR:",
             response.status_code,
+            error_message,
             flush=True,
         )
         return
