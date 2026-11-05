@@ -423,7 +423,8 @@ def admin_push_token_status(
             detail="Could not load this device's notification status.",
         ) from exc
 
-    registration = result.data or {}
+    registration = result.data if result is not None else None
+    registration = registration or {}
     return {
         "enabled": bool(
             registration.get("admin_notification_eligible")
