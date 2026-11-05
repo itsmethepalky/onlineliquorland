@@ -142,7 +142,7 @@ class Settings:
     )
     WHATSAPP_ADMIN_PHONE: str = os.getenv(
         "WHATSAPP_ADMIN_PHONE",
-        "+9779851144738",
+        "",
     )
     WHATSAPP_TEMPLATE_NAME: str = os.getenv(
         "WHATSAPP_TEMPLATE_NAME",
@@ -195,9 +195,8 @@ class Settings:
                 "projectId",
                 "messagingSenderId",
                 "appId",
-                "vapidKey",
             )
-        )
+        ) and bool(self.FIREBASE_WEB_VAPID_KEY)
 
 
 settings = Settings()
