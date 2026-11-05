@@ -188,11 +188,12 @@ them.
 
 The Firebase Web App API key and VAPID public key are not service credentials.
 The Supabase gateway verifies the caller's JWT, and the Edge Function checks
-that its bearer token matches the configured service-role key. It then
+that its verified bearer-token claims include the `service_role` role. It then
 independently checks each registered device's stored admin role and current
-active admin profile before sending through FCM HTTP v1. The service-account
-private key is used only by the Edge Function. Notification permission and
-browser support are required; delivery is best-effort.
+active admin profile before sending through FCM HTTP v1. Keep JWT verification
+enabled for this function. The service-account private key is used only by the
+Edge Function. Notification permission and browser support are required;
+delivery is best-effort.
 
 ## Admin WhatsApp order notifications
 

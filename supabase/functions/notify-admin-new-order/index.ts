@@ -38,6 +38,26 @@ function jsonResponse(status: number, body: Record<string, unknown>) {
   });
 }
 
+function hasServiceRoleClaim(token: string): boolean {
+  const parts = token.split(".");
+  if (parts.length !== 3) {
+    return false;
+  }
+
+  try {
+    const encodedPayload = parts[1]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+    const payload = atob(
+      encodedPayload.padEnd(Math.ceil(encodedPayload.length / 4) * 4, "="),
+    );
+    const claims = JSON.parse(payload);
+    return claims.role === "service_role";
+  } catch {
+    return false;
+  }
+}
+
 async function getFirebaseAccessToken(
   account: FirebaseServiceAccount,
 ): Promise<string> {
@@ -177,8 +197,8 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(401, { error: "Unauthorized." });
   }
 
-  // The Supabase gateway verifies this JWT before invoking the function.
-  if (bearerMatch[1] !== serviceRoleKey) {
+  // The gateway verifies the JWT signature; only service-role callers proceed.
+  if (!hasServiceRoleClaim(bearerMatch[1])) {
     return jsonResponse(403, { error: "Service access required." });
   }
 
