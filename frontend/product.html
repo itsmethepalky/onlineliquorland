@@ -475,6 +475,8 @@ function renderGallery(product) {
       <img
         src="${escapeHtml(image.image_url)}"
         alt="${escapeHtml(product.name)}"
+        decoding="async"
+        fetchpriority="high"
       >
     `;
 
@@ -509,6 +511,8 @@ function renderGallery(product) {
         <img
           src="${escapeHtml(image.image_url)}"
           alt="${escapeHtml(product.name)}"
+          loading="lazy"
+          decoding="async"
         >
 
       </button>
@@ -782,6 +786,7 @@ function renderMoreProducts(products) {
                   src="${escapeHtml(image)}"
                   alt="${escapeHtml(product.name)}"
                   loading="lazy"
+                  decoding="async"
                 >`
               : `<div class="product-placeholder">🍷</div>`
           }
@@ -812,7 +817,7 @@ async function loadMoreProducts(currentProductId) {
     document.getElementById("relatedProducts");
 
   try {
-    const response = await fetch(`${API_BASE}/api/products`);
+    const response = await fetch(`${API_BASE}/api/products?limit=24`);
     if (!response.ok) {
       throw new Error(
         `Could not load more products (HTTP ${response.status}).`

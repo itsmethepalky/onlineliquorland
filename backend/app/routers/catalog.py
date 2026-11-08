@@ -1,5 +1,6 @@
 from typing import Optional
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
@@ -200,6 +201,20 @@ def add_product_images(products: list[dict]) -> None:
         )
 
 
+def add_product_metadata(products: list[dict]) -> None:
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        taxonomy_future = executor.submit(
+            add_taxonomy_names,
+            products,
+        )
+        images_future = executor.submit(
+            add_product_images,
+            products,
+        )
+        taxonomy_future.result()
+        images_future.result()
+
+
 @router.get("/categories")
 def list_categories():
     query = (
@@ -236,6 +251,9 @@ def list_products(
     category_id: Optional[int] = None,
     brand_id: Optional[int] = None,
     in_stock: bool = False,
+    limit: Optional[int] = Query(default=None, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=1000000),
+    sort: str = Query(default="name", pattern="^(name|price-low|price-high)$"),
 ):
     query = (
         supabase_admin
@@ -258,8 +276,15 @@ def list_products(
 
     if search and search.strip():
         text = search.strip()
+        escaped_text = (
+            text.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
         query = query.or_(
-            f"name.ilike.%{text}%,sku.ilike.%{text}%"
+            f'name.ilike."%{escaped_text}%",'
+            f'sku.ilike."%{escaped_text}%"'
         )
 
     if category_id is not None:
@@ -271,12 +296,19 @@ def list_products(
     if in_stock:
         query = query.gt("stock_quantity", 0)
 
-    query = query.order("name")
+    if sort == "price-low":
+        query = query.order("unit_price").order("name")
+    elif sort == "price-high":
+        query = query.order("unit_price", desc=True).order("name")
+    else:
+        query = query.order("name")
+
+    if limit is not None:
+        query = query.range(offset, offset + limit - 1)
 
     response = execute_with_retry(query)
     products = response.data or []
-    add_taxonomy_names(products)
-    add_product_images(products)
+    add_product_metadata(products)
 
     return [
         clean_product(product)
@@ -339,8 +371,7 @@ def get_product(product_id: int):
         )
 
     product = response.data
-    add_taxonomy_names([product])
-    add_product_images([product])
+    add_product_metadata([product])
     return clean_product(product)
 
 

@@ -179,7 +179,15 @@ async def security_headers(request, call_next):
         "payment=(), usb=()"
     )
 
-    if request.url.path.startswith("/api/"):
+    if response.status_code < 400 and request.url.path in {
+        "/api/categories",
+        "/api/brands",
+        "/api/products",
+    } and request.method == "GET":
+        response.headers["Cache-Control"] = (
+            "public, max-age=5, stale-while-revalidate=15"
+        )
+    elif request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     elif Path(request.url.path).suffix.lower() in {
         ".css",

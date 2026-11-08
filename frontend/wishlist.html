@@ -135,7 +135,7 @@ function renderWishlist() {
           ? `${quantity} available`
           : "Out of stock";
     const image = item.image_url
-      ? `<img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.name)}" loading="lazy">`
+      ? `<img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async">`
       : `<div class="product-placeholder"><i class="bi bi-cup-straw"></i></div>`;
 
     return `

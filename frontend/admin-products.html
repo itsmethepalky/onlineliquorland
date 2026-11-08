@@ -488,7 +488,7 @@ async function uploadProductImage(productId, file) {
   const { data, error } = await window.supabaseClient.storage
     .from("product-images")
     .upload(storagePath, file, {
-      cacheControl: "3600",
+      cacheControl: "31536000",
       contentType: file.type,
       upsert: false
     });

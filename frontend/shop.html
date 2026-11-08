@@ -23,6 +23,7 @@
   <script src="js/supabase.js"></script>
   <script src="/js/stock-realtime.js"></script>
   <script src="/js/wishlist.js"></script>
+  <script src="/js/storefront-cart.js"></script>
   <script src="/js/product-links.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
@@ -220,6 +221,14 @@
         id="shopProducts"
       ></div>
 
+      <button
+        type="button"
+        id="loadMoreProducts"
+        class="store-button secondary load-more-products hidden"
+      >
+        Load more
+      </button>
+
       <p id="wishlistMessage" class="wishlist-message" role="status" aria-live="polite"></p>
 
       <div
@@ -324,6 +333,13 @@ let categories = [];
 let brands = [];
 const latestStockUpdates = new Map();
 const wishlistMessage = document.getElementById("wishlistMessage");
+const loadMoreProductsButton = document.getElementById("loadMoreProducts");
+const PAGE_SIZE = 24;
+let hasMoreProducts = false;
+let loadingMoreProducts = false;
+let productsRequestId = 0;
+let nextProductsOffset = 0;
+let searchDebounce;
 
 
 function escapeHtml(value) {
@@ -398,8 +414,9 @@ function populateFilters() {
 
 function renderProducts(products) {
 
-  resultCount.textContent =
-    `${products.length} product${products.length === 1 ? "" : "s"}`;
+  resultCount.textContent = hasMoreProducts
+    ? `Showing ${products.length}+ products`
+    : `${products.length} product${products.length === 1 ? "" : "s"}`;
 
 
   if (!products.length) {
@@ -442,6 +459,7 @@ function renderProducts(products) {
                     src="${escapeHtml(image)}"
                     alt="${escapeHtml(product.name)}"
                     loading="lazy"
+                    decoding="async"
                   >
                 `
                 : `
@@ -478,7 +496,16 @@ function renderProducts(products) {
 
             ${
               inStock
-                ? ""
+                ? `
+                  <button
+                    type="button"
+                    class="store-button primary product-quick-add"
+                    data-quick-add-product-id="${Number(product.id)}"
+                  >
+                    <i class="bi bi-bag-plus" aria-hidden="true"></i>
+                    Add to Cart
+                  </button>
+                `
                 : `
                   <button
                     type="button"
@@ -502,96 +529,11 @@ function renderProducts(products) {
 
 
 function applyFilters() {
-
-  const search =
-    searchInput.value.trim().toLowerCase();
-
-  const category =
-    categoryFilter.value;
-
-  const brand =
-    brandFilter.value;
-
-  const onlyStock =
-    stockFilter.checked;
-
-  const sort =
-    sortFilter.value;
-
-
-  let filtered =
-    allProducts.filter(product => {
-
-      const matchesSearch =
-        !search ||
-        String(product.name || "")
-          .toLowerCase()
-          .includes(search) ||
-        String(product.sku || "")
-          .toLowerCase()
-          .includes(search);
-
-
-      const matchesCategory =
-        !category ||
-        String(product.category_id) === category;
-
-
-      const matchesBrand =
-        !brand ||
-        String(product.brand_id) === brand;
-
-
-      const matchesStock =
-        !onlyStock ||
-        Number(product.stock_quantity) > 0;
-
-
-      return (
-        matchesSearch &&
-        matchesCategory &&
-        matchesBrand &&
-        matchesStock
-      );
-
-    });
-
-
-  if (sort === "price-low") {
-
-    filtered.sort(
-      (a, b) =>
-        Number(a.unit_price) -
-        Number(b.unit_price)
-    );
-
-  } else if (sort === "price-high") {
-
-    filtered.sort(
-      (a, b) =>
-        Number(b.unit_price) -
-        Number(a.unit_price)
-    );
-
-  } else if (sort === "name") {
-
-    filtered.sort(
-      (a, b) =>
-        String(a.name || "")
-          .localeCompare(
-            String(b.name || "")
-          )
-    );
-
-  } else if (sort === "featured") {
-
-    // Featured keeps the original API/product order.
-    // No additional sorting is applied.
-
-  }
-
-
-  renderProducts(filtered);
+  window.clearTimeout(searchDebounce);
+  searchDebounce = window.setTimeout(
+    () => loadProducts(true),
+    250
+  );
 }
 
 
@@ -625,61 +567,118 @@ async function loadBrands() {
 }
 
 
-async function loadProducts() {
-
-  const response =
-    await fetch(`${API_BASE}/api/products`);
-
-  if (!response.ok) {
-    throw new Error("Failed to load products");
+async function loadProducts(reset = true) {
+  if (loadingMoreProducts && !reset) {
+    return;
   }
 
-  allProducts =
-    await response.json();
+  const requestId = reset
+    ? ++productsRequestId
+    : productsRequestId;
+  if (!reset) {
+    loadingMoreProducts = true;
+  }
+  loadMoreProductsButton.disabled = true;
 
-  allProducts = allProducts.map(product => {
-    const stock = latestStockUpdates.get(Number(product.id));
-    return stock
-      ? {
-          ...product,
-          stock_quantity: stock.stock_quantity,
-          is_active: stock.is_active
-        }
-      : product;
-  }).filter(product => product.is_active !== false);
+  const params = new URLSearchParams({
+    limit: String(PAGE_SIZE),
+    offset: String(reset ? 0 : nextProductsOffset)
+  });
+  const search = searchInput.value.trim();
+  if (search) {
+    params.set("search", search);
+  }
+  if (categoryFilter.value) {
+    params.set("category_id", categoryFilter.value);
+  }
+  if (brandFilter.value) {
+    params.set("brand_id", brandFilter.value);
+  }
+  if (stockFilter.checked) {
+    params.set("in_stock", "true");
+  }
+  if (sortFilter.value === "price-low" || sortFilter.value === "price-high") {
+    params.set("sort", sortFilter.value);
+  }
 
+  try {
+    const response = await fetch(
+      `${API_BASE}/api/products?${params.toString()}`
+    );
+    if (!response.ok) {
+      throw new Error(`Products request failed with status ${response.status}`);
+    }
+
+    const products = await response.json();
+    if (requestId !== productsRequestId) {
+      return;
+    }
+    nextProductsOffset = reset
+      ? products.length
+      : nextProductsOffset + products.length;
+    const currentPage = products
+      .map(product => {
+        const stock = latestStockUpdates.get(Number(product.id));
+        return stock
+          ? {
+              ...product,
+              stock_quantity: stock.stock_quantity,
+              is_active: stock.is_active
+            }
+          : product;
+      })
+      .filter(product => product.is_active !== false);
+
+    allProducts = reset
+      ? currentPage
+      : allProducts.concat(
+          currentPage.filter(
+            product => !allProducts.some(
+              current => Number(current.id) === Number(product.id)
+            )
+          )
+        );
+    hasMoreProducts = products.length === PAGE_SIZE;
+    renderProducts(allProducts);
+    loadMoreProductsButton.classList.toggle("hidden", !hasMoreProducts);
+  } catch (error) {
+    if (requestId === productsRequestId) {
+      console.error("Shop loading error:", error);
+      resultCount.textContent = "Unable to load products.";
+      shopProducts.innerHTML = `
+        <div class="product-loading">
+          Unable to load the shop right now. Please refresh the page.
+        </div>
+      `;
+      loadMoreProductsButton.classList.add("hidden");
+    }
+  } finally {
+    if (reset || requestId === productsRequestId) {
+      loadingMoreProducts = false;
+      loadMoreProductsButton.disabled = false;
+    }
+  }
 }
 
 
 async function initializeShop() {
-
   try {
-
-    await Promise.all([
-      loadProducts(),
-      loadCategories(),
-      loadBrands()
-    ]);
-
+    await Promise.all([loadCategories(), loadBrands()]);
     populateFilters();
-    applyFilters();
 
+    const params = new URLSearchParams(window.location.search);
+    searchInput.value = params.get("search") || "";
+    categoryFilter.value = params.get("category_id") || "";
+    await loadProducts(true);
   } catch (error) {
-
-    console.error("Shop loading error:", error);
-
-    resultCount.textContent =
-      "Unable to load products.";
-
+    console.error("Shop initialization error:", error);
+    resultCount.textContent = "Unable to load the shop.";
     shopProducts.innerHTML = `
       <div class="product-loading">
-        Unable to load the shop right now.
-        Please refresh the page.
+        Unable to load the shop right now. Please refresh the page.
       </div>
     `;
-
   }
-
 }
 
 
@@ -729,10 +728,36 @@ function applyStockUpdate(stock, eventType) {
     product.is_active = true;
   }
 
-  applyFilters();
+  renderProducts(
+    stockFilter.checked
+      ? allProducts.filter(item => Number(item.stock_quantity) > 0)
+      : allProducts
+  );
 }
 
 shopProducts.addEventListener("click", event => {
+  const quickAddButton = event.target.closest("[data-quick-add-product-id]");
+  if (quickAddButton) {
+    const product = allProducts.find(
+      item => Number(item.id) === Number(quickAddButton.dataset.quickAddProductId)
+    );
+    if (!product) {
+      return;
+    }
+
+    try {
+      window.storefrontCart.add(
+        product,
+        Number(product.stock_quantity)
+      );
+      wishlistMessage.textContent = `${product.name} added to your cart.`;
+    } catch (error) {
+      console.error("Unable to add product to cart:", error);
+      wishlistMessage.textContent = error.message;
+    }
+    return;
+  }
+
   const button = event.target.closest("[data-wishlist-product-id]");
   if (!button) {
     return;
@@ -757,6 +782,11 @@ shopProducts.addEventListener("click", event => {
 });
 
 window.productStockRealtime.subscribe(applyStockUpdate);
+loadMoreProductsButton.addEventListener(
+  "click",
+  () => loadProducts(false)
+);
+window.addEventListener("store:cart-updated", updateCartCount);
 
 
 function resetFilters() {
