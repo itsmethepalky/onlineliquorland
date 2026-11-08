@@ -230,7 +230,7 @@ Deno.serve(async (request: Request) => {
   const { data: registrations, error: registrationError } = await adminClient
     .from("admin_push_tokens")
     .select("token,user_id,browser_id")
-    .eq("platform", "web")
+    .in("platform", ["web", "android"])
     .eq("role", "admin")
     .eq("is_active", true)
     .eq("admin_notification_eligible", true);

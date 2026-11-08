@@ -2,11 +2,17 @@
   "use strict";
 
   const DEVICE_ID_KEY = "oll-admin-push-device-id";
+  const SOUND_DATABASE = "oll-admin-push-settings";
+  const SOUND_STORE = "settings";
+  const SOUND_KEY = "order-sound";
+  const MAX_SOUND_BYTES = 2 * 1024 * 1024;
   const FIREBASE_VERSION = "10.12.2";
   let firebaseMessaging = null;
   let foregroundListener = null;
   let configPromise = null;
   let deviceId = null;
+  let customOrderSoundUrl = null;
+  let activeOrderAudio = null;
   let notificationsEnabled = false;
   let refreshInProgress = false;
 
@@ -41,6 +47,166 @@
     const newId = window.crypto.randomUUID();
     window.localStorage.setItem(DEVICE_ID_KEY, newId);
     return newId;
+  }
+
+  function openSoundDatabase() {
+    return new Promise(function (resolve, reject) {
+      const request = window.indexedDB.open(SOUND_DATABASE, 1);
+      request.onupgradeneeded = function () {
+        request.result.createObjectStore(SOUND_STORE);
+      };
+      request.onsuccess = function () {
+        resolve(request.result);
+      };
+      request.onerror = function () {
+        reject(request.error || new Error("Could not open sound settings."));
+      };
+    });
+  }
+
+  async function getCustomOrderSound() {
+    const database = await openSoundDatabase();
+    return new Promise(function (resolve, reject) {
+      const transaction = database.transaction(SOUND_STORE, "readonly");
+      const request = transaction.objectStore(SOUND_STORE).get(SOUND_KEY);
+      request.onsuccess = function () {
+        database.close();
+        resolve(request.result || null);
+      };
+      request.onerror = function () {
+        database.close();
+        reject(request.error || new Error("Could not load custom sound."));
+      };
+    });
+  }
+
+  async function saveCustomOrderSound(file) {
+    const database = await openSoundDatabase();
+    return new Promise(function (resolve, reject) {
+      const transaction = database.transaction(SOUND_STORE, "readwrite");
+      transaction.objectStore(SOUND_STORE).put(file, SOUND_KEY);
+      transaction.oncomplete = function () {
+        database.close();
+        resolve();
+      };
+      transaction.onerror = function () {
+        database.close();
+        reject(transaction.error || new Error("Could not save custom sound."));
+      };
+      transaction.onabort = function () {
+        database.close();
+        reject(transaction.error || new Error("Could not save custom sound."));
+      };
+    });
+  }
+
+  async function deleteCustomOrderSound() {
+    const database = await openSoundDatabase();
+    return new Promise(function (resolve, reject) {
+      const transaction = database.transaction(SOUND_STORE, "readwrite");
+      transaction.objectStore(SOUND_STORE).delete(SOUND_KEY);
+      transaction.oncomplete = function () {
+        database.close();
+        resolve();
+      };
+      transaction.onerror = function () {
+        database.close();
+        reject(transaction.error || new Error("Could not remove custom sound."));
+      };
+      transaction.onabort = function () {
+        database.close();
+        reject(transaction.error || new Error("Could not remove custom sound."));
+      };
+    });
+  }
+
+  async function loadCustomOrderSound() {
+    const sound = await getCustomOrderSound();
+    if (customOrderSoundUrl) {
+      URL.revokeObjectURL(customOrderSoundUrl);
+      customOrderSoundUrl = null;
+    }
+
+    if (sound) {
+      customOrderSoundUrl = URL.createObjectURL(sound);
+      element("adminOrderSoundStatus").textContent =
+        "Custom sound saved for this browser. It plays while this admin page is open and in the foreground.";
+      element("removeAdminOrderSound").classList.remove("hidden");
+    } else {
+      element("adminOrderSoundStatus").textContent =
+        "Default notification sound. Custom sound plays only while this admin page is open and in the foreground.";
+      element("removeAdminOrderSound").classList.add("hidden");
+    }
+  }
+
+  async function playOrderSound() {
+    if (!customOrderSoundUrl) {
+      return;
+    }
+
+    if (activeOrderAudio) {
+      activeOrderAudio.pause();
+      activeOrderAudio.currentTime = 0;
+    }
+
+    const audio = new Audio(customOrderSoundUrl);
+    activeOrderAudio = audio;
+    audio.addEventListener("ended", function () {
+      if (activeOrderAudio === audio) {
+        activeOrderAudio = null;
+      }
+    }, { once: true });
+    try {
+      await audio.play();
+    } catch (error) {
+      if (activeOrderAudio === audio) {
+        activeOrderAudio = null;
+      }
+      console.warn("ADMIN ORDER SOUND PLAYBACK ERROR:", error.name);
+      showMessage(
+        "adminPushError",
+        "Could not play the custom sound. Check its format and browser audio settings."
+      );
+    }
+  }
+
+  async function saveSelectedOrderSound() {
+    hideMessage("adminPushError");
+    const input = element("adminOrderSoundFile");
+    const file = input.files[0];
+    if (!file) {
+      return;
+    }
+    if (!file.type.startsWith("audio/")) {
+      input.value = "";
+      showMessage("adminPushError", "Choose a valid audio file.");
+      return;
+    }
+    if (file.size > MAX_SOUND_BYTES) {
+      input.value = "";
+      showMessage("adminPushError", "Audio files must be 2 MB or smaller.");
+      return;
+    }
+
+    try {
+      await saveCustomOrderSound(file);
+      await loadCustomOrderSound();
+      input.value = "";
+      element("adminOrderSoundStatus").textContent =
+        "Custom sound saved. Select Preview sound to enable and test playback.";
+    } catch (error) {
+      showMessage("adminPushError", error.message);
+    }
+  }
+
+  async function removeOrderSound() {
+    hideMessage("adminPushError");
+    try {
+      await deleteCustomOrderSound();
+      await loadCustomOrderSound();
+    } catch (error) {
+      showMessage("adminPushError", error.message);
+    }
   }
 
   async function loadConfig() {
@@ -130,6 +296,7 @@
           return;
         }
 
+        void playOrderSound();
         const notification = new Notification(
           data.title || "New customer order",
           {
@@ -332,6 +499,12 @@
   }
 
   async function initialize() {
+    element("adminOrderSoundFile")
+      .addEventListener("change", saveSelectedOrderSound);
+    element("previewAdminOrderSound")
+      .addEventListener("click", playOrderSound);
+    element("removeAdminOrderSound")
+      .addEventListener("click", removeOrderSound);
     element("enableAdminPush")
       .addEventListener("click", enableNotifications);
     element("disableAdminPush")
@@ -346,6 +519,14 @@
     } catch (error) {
       setStatus("Notification settings could not be loaded.");
       showMessage("adminPushError", error.message);
+    }
+
+    try {
+      await loadCustomOrderSound();
+    } catch (error) {
+      console.error("ADMIN ORDER SOUND STORAGE ERROR:", error.name);
+      element("adminOrderSoundStatus").textContent =
+        "Custom sound storage is unavailable in this browser; push alerts still work.";
     }
   }
 

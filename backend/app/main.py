@@ -824,6 +824,11 @@ def frontend_cart():
     return serve_page("cart.html")
 
 
+@app.get("/wishlist", include_in_schema=False)
+def frontend_wishlist():
+    return serve_page("wishlist.html")
+
+
 @app.get("/checkout", include_in_schema=False)
 def frontend_checkout():
     return serve_page("checkout.html")

@@ -29,6 +29,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/js/supabase.js"></script>
+  <script src="/js/stock-realtime.js"></script>
+  <script src="/js/wishlist.js"></script>
   <script src="/js/product-links.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
@@ -54,6 +56,11 @@
   <a href="/shop" title="Shop" aria-label="Shop">
     <i class="bi bi-grid"></i>
     <span>Shop</span>
+  </a>
+
+  <a href="/wishlist" title="Wishlist" aria-label="Wishlist">
+    <i class="bi bi-heart"></i>
+    <span>Wishlist</span>
   </a>
 
   <a href="/orders" title="My Orders" aria-label="My Orders">
@@ -200,6 +207,15 @@
               Add to Cart
             </button>
 
+            <button
+              type="button"
+              id="addToWishlist"
+              class="store-button secondary product-detail-wishlist hidden"
+            >
+              <i class="bi bi-heart"></i>
+              Save to Wishlist
+            </button>
+
           </div>
 
 
@@ -333,6 +349,9 @@ const quantityPlus =
 const addToCart =
   document.getElementById("addToCart");
 
+const addToWishlist =
+  document.getElementById("addToWishlist");
+
 const cartMessage =
   document.getElementById("cartMessage");
 
@@ -348,6 +367,7 @@ const cartCount =
 
 let currentProduct = null;
 let maxQuantity = 0;
+const latestStockUpdates = new Map();
 
 
 function escapeHtml(value) {
@@ -528,13 +548,15 @@ function renderGallery(product) {
 
 function renderProduct(product) {
 
+  const latestStock = latestStockUpdates.get(Number(product.id));
+  if (latestStock) {
+    product.stock_quantity = latestStock.stock_quantity;
+    product.is_active = latestStock.is_active;
+  }
+
   currentProduct = product;
 
-  maxQuantity =
-    Math.max(
-      0,
-      Number(product.stock_quantity || 0)
-    );
+  renderStockAvailability();
 
 
   document.title =
@@ -659,49 +681,58 @@ function renderProduct(product) {
       : "—";
 
 
-  if (maxQuantity > 0) {
-
-    productStock.textContent =
-      `${maxQuantity} available`;
-
-    productStock.className =
-      "product-detail-stock in-stock";
-
-    quantityInput.max =
-      String(maxQuantity);
-
-    quantityInput.value = "1";
-
-    addToCart.disabled = false;
-
-    quantityMinus.disabled = false;
-    quantityPlus.disabled = false;
-
-  } else {
-
-    productStock.textContent =
-      "Out of stock";
-
-    productStock.className =
-      "product-detail-stock out-of-stock";
-
-    quantityInput.value = "0";
-
-    quantityInput.max = "0";
-
-    addToCart.disabled = true;
-
-    quantityMinus.disabled = true;
-    quantityPlus.disabled = true;
-
-  }
-
-
   renderGallery(product);
   showProduct();
 
   loadMoreProducts(product.id);
 
+}
+
+
+function renderStockAvailability() {
+  const isActive = currentProduct?.is_active !== false;
+  maxQuantity = isActive
+    ? Math.max(0, Number(currentProduct?.stock_quantity || 0))
+    : 0;
+
+  if (maxQuantity > 0) {
+    productStock.textContent = `${maxQuantity} available`;
+    productStock.className = "product-detail-stock in-stock";
+    quantityInput.max = String(maxQuantity);
+    quantityInput.value = String(
+      Math.max(1, Math.min(Number(quantityInput.value) || 1, maxQuantity))
+    );
+    addToCart.disabled = false;
+    quantityMinus.disabled = false;
+    quantityPlus.disabled = false;
+    addToWishlist.classList.add("hidden");
+    return;
+  }
+
+  productStock.textContent = isActive
+    ? "Out of stock"
+    : "No longer available";
+  productStock.className = "product-detail-stock out-of-stock";
+  quantityInput.value = "0";
+  quantityInput.max = "0";
+  addToCart.disabled = true;
+  quantityMinus.disabled = true;
+  quantityPlus.disabled = true;
+  addToWishlist.classList.remove("hidden");
+}
+
+
+function applyProductStockUpdate(stock, eventType) {
+  const productId = Number(stock.product_id);
+  latestStockUpdates.set(productId, stock);
+  if (!currentProduct || Number(currentProduct.id) !== productId) {
+    return;
+  }
+
+  currentProduct.stock_quantity = Number(stock.stock_quantity || 0);
+  currentProduct.is_active =
+    eventType !== "DELETE" && stock.is_active !== false;
+  renderStockAvailability();
 }
 
 
@@ -1104,6 +1135,25 @@ addToCart.addEventListener(
   }
 );
 
+addToWishlist.addEventListener("click", () => {
+  if (!currentProduct) {
+    return;
+  }
+
+  try {
+    const added = window.productWishlist.add(currentProduct);
+    showCartMessage(
+      added
+        ? `${currentProduct.name} saved to your wishlist.`
+        : `${currentProduct.name} is already in your wishlist.`
+    );
+  } catch (error) {
+    console.error("Unable to save product to wishlist:", error);
+    showCartMessage("Unable to save this product. Please try again.");
+  }
+});
+
+window.productStockRealtime.subscribe(applyProductStockUpdate);
 
 updateCartCount();
 loadProduct();

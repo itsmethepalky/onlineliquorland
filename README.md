@@ -84,6 +84,7 @@ then apply these checkout migrations in this order:
 17. `database/migrations/027_multiple_maintenance_schedules.sql`
 18. `database/migrations/028_admin_fcm_tokens.sql`
 19. `database/migrations/029_admin_web_push.sql`
+20. `database/migrations/030_realtime_product_stock.sql`
 
 The checkout migrations define the seven-argument checkout function; the
 server-side promotions migration also drops the obsolete six-argument version.
@@ -115,6 +116,11 @@ active messages. Windows use Nepal time (`Asia/Kathmandu`). One-time durations
 are optional; when omitted, maintenance stays active until an admin disables
 the window. Daily windows require a duration and reopen automatically after
 each window. The customer notice heading is "Shop Is closed now".
+
+Migration 030 publishes only product ID, stock quantity, and active status to
+Supabase Realtime for the storefront. Checkout already locks product rows and
+checks/decrements inventory in one transaction, so concurrent checkouts cannot
+sell more than the available stock.
 
 Migrations 015–017 are designed to be rerunnable and do not intentionally drop
 functions, tables, or stored data. Migration 015 validates its checkout and
@@ -152,6 +158,12 @@ staff devices are excluded. Clicking an alert opens its admin order detail
 route, which asks the admin to sign in again if needed. The service worker
 handles background messages, and the database tracks delivery per order and
 browser to prevent duplicate alerts.
+
+Admins can optionally select a custom audio file in **Admin → Account**.
+It is saved only in that browser and plays for new orders while the Admin
+Account page is open in the foreground. Use **Preview sound** once to allow
+browser audio playback. Background or closed-page notifications use the
+browser or operating system's default sound.
 
 Apply migrations 028 and 029. Configure the following public Firebase Web App
 values in the backend environment; these values identify the Firebase project

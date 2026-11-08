@@ -284,6 +284,29 @@ def list_products(
     ]
 
 
+@router.get("/products/stock")
+def get_products_stock(
+    product_ids: list[int] = Query(...),
+):
+    if (
+        not product_ids
+        or len(product_ids) > 100
+        or any(product_id <= 0 for product_id in product_ids)
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Provide between 1 and 100 valid product IDs.",
+        )
+
+    response = execute_with_retry(
+        supabase_admin
+        .table("products")
+        .select("id,stock_quantity,is_active,updated_at")
+        .in_("id", list(set(product_ids)))
+    )
+    return response.data or []
+
+
 @router.get("/products/{product_id}")
 def get_product(product_id: int):
     query = (

@@ -21,6 +21,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js"></script>
+  <script src="/js/stock-realtime.js"></script>
+  <script src="/js/wishlist.js"></script>
   <script src="/js/product-links.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
@@ -46,6 +48,11 @@
   <a href="/shop" title="Shop" aria-label="Shop">
     <i class="bi bi-grid"></i>
     <span>Shop</span>
+  </a>
+
+  <a href="/wishlist" title="Wishlist" aria-label="Wishlist">
+    <i class="bi bi-heart"></i>
+    <span>Wishlist</span>
   </a>
 
   <a href="/orders" title="My Orders" aria-label="My Orders">
@@ -213,6 +220,8 @@
         id="shopProducts"
       ></div>
 
+      <p id="wishlistMessage" class="wishlist-message" role="status" aria-live="polite"></p>
+
       <div
         class="shop-empty hidden"
         id="shopEmpty"
@@ -313,6 +322,8 @@ const cartCount =
 let allProducts = [];
 let categories = [];
 let brands = [];
+const latestStockUpdates = new Map();
+const wishlistMessage = document.getElementById("wishlistMessage");
 
 
 function escapeHtml(value) {
@@ -412,6 +423,8 @@ function renderProducts(products) {
 
       const inStock =
         Number(product.stock_quantity) > 0;
+      const stockQuantity =
+        Math.max(0, Number(product.stock_quantity) || 0);
 
 
       return `
@@ -458,10 +471,25 @@ function renderProducts(products) {
               <span
                 class="stock-status ${inStock ? "" : "out"}"
               >
-                ${inStock ? "In stock" : "Out of stock"}
+                ${inStock ? `${stockQuantity} available` : "Out of stock"}
               </span>
 
             </div>
+
+            ${
+              inStock
+                ? ""
+                : `
+                  <button
+                    type="button"
+                    class="store-button secondary wishlist-save-button"
+                    data-wishlist-product-id="${Number(product.id)}"
+                  >
+                    <i class="bi bi-heart"></i>
+                    Save to Wishlist
+                  </button>
+                `
+            }
 
           </div>
 
@@ -609,6 +637,17 @@ async function loadProducts() {
   allProducts =
     await response.json();
 
+  allProducts = allProducts.map(product => {
+    const stock = latestStockUpdates.get(Number(product.id));
+    return stock
+      ? {
+          ...product,
+          stock_quantity: stock.stock_quantity,
+          is_active: stock.is_active
+        }
+      : product;
+  }).filter(product => product.is_active !== false);
+
 }
 
 
@@ -669,6 +708,55 @@ function updateCartCount() {
   }
 
 }
+
+function applyStockUpdate(stock, eventType) {
+  const productId = Number(stock.product_id);
+  latestStockUpdates.set(productId, stock);
+
+  const product = allProducts.find(
+    item => Number(item.id) === productId
+  );
+  if (!product) {
+    return;
+  }
+
+  if (eventType === "DELETE" || stock.is_active === false) {
+    allProducts = allProducts.filter(
+      item => Number(item.id) !== productId
+    );
+  } else {
+    product.stock_quantity = Number(stock.stock_quantity || 0);
+    product.is_active = true;
+  }
+
+  applyFilters();
+}
+
+shopProducts.addEventListener("click", event => {
+  const button = event.target.closest("[data-wishlist-product-id]");
+  if (!button) {
+    return;
+  }
+
+  const product = allProducts.find(
+    item => Number(item.id) === Number(button.dataset.wishlistProductId)
+  );
+  if (!product) {
+    return;
+  }
+
+  try {
+    window.productWishlist.add(product);
+    button.innerHTML = `<i class="bi bi-heart-fill"></i> Saved to Wishlist`;
+    button.disabled = true;
+  } catch (error) {
+    console.error("Unable to save product to wishlist:", error);
+    wishlistMessage.textContent =
+      "Unable to save this product. Please try again.";
+  }
+});
+
+window.productStockRealtime.subscribe(applyStockUpdate);
 
 
 function resetFilters() {

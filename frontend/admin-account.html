@@ -105,6 +105,25 @@
         Turn off on this browser
       </button>
     </div>
+    <div class="admin-order-sound">
+      <label for="adminOrderSoundFile">Custom order sound (optional)</label>
+      <input
+        id="adminOrderSoundFile"
+        type="file"
+        accept="audio/*"
+      >
+      <div class="admin-push-actions">
+        <button type="button" class="btn btn-outline" id="previewAdminOrderSound">
+          Preview sound
+        </button>
+        <button type="button" class="btn btn-outline hidden" id="removeAdminOrderSound">
+          Remove custom sound
+        </button>
+      </div>
+      <span id="adminOrderSoundStatus" class="admin-order-sound-status" role="status">
+        Default notification sound. Custom sound plays only while this admin page is open and in the foreground.
+      </span>
+    </div>
   </section>
 
   <section class="admin-account-layout">
