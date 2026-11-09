@@ -14,6 +14,7 @@ from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
     PlainTextResponse,
+    RedirectResponse,
     Response,
 )
 from fastapi.staticfiles import StaticFiles
@@ -810,15 +811,26 @@ def frontend_terms_and_conditions():
 @app.get("/product", include_in_schema=False)
 def frontend_product(request: Request):
     product_id = request.query_params.get("id")
-    if product_id is not None:
-        try:
-            parsed_product_id = int(product_id)
-        except ValueError:
-            raise HTTPException(status_code=404, detail="Product not found")
-        if parsed_product_id <= 0:
-            raise HTTPException(status_code=404, detail="Product not found")
-        return render_product_page(catalog.get_product(parsed_product_id))
-    return render_product_page()
+    if product_id is None:
+        return RedirectResponse(url="/shop", status_code=301)
+
+    try:
+        parsed_product_id = int(product_id)
+    except ValueError:
+        return RedirectResponse(url="/shop", status_code=301)
+    if parsed_product_id <= 0:
+        return RedirectResponse(url="/shop", status_code=301)
+
+    product = catalog.get_product(parsed_product_id)
+    return RedirectResponse(
+        url=f"/product/{product_slug(product['name'])}",
+        status_code=301,
+    )
+
+
+@app.get("/product/", include_in_schema=False)
+def frontend_product_index_slash():
+    return RedirectResponse(url="/shop", status_code=301)
 
 
 @app.get("/product/{slug}", include_in_schema=False)
