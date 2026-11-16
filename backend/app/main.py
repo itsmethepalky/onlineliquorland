@@ -310,21 +310,25 @@ def sitemap_xml():
         response = execute_read_with_retry(
             supabase_admin
             .table("products")
-            .select("id,name")
+            .select("id,name,updated_at")
             .eq("is_active", True)
             .order("id")
             .range(product_offset, product_offset + product_page_size - 1),
             operation="SEO SITEMAP PRODUCTS",
         )
         products = response.data or []
-        urls += "".join(
-            "<url><loc>"
-            + escape(
-                f"{site_url}/product/{product_slug(product['name'])}"
+        for product in products:
+            urls += (
+                "<url><loc>"
+                + escape(
+                    f"{site_url}/product/{product_slug(product['name'])}"
+                )
+                + "</loc>"
             )
-            + "</loc></url>"
-            for product in products
-        )
+            updated_at = product.get("updated_at")
+            if updated_at:
+                urls += f"<lastmod>{escape(str(updated_at))}</lastmod>"
+            urls += "</url>"
         if len(products) < product_page_size:
             break
         product_offset += product_page_size
@@ -701,6 +705,8 @@ def render_product_page(product: dict | None = None) -> HTMLResponse:
             "url": canonical_url,
             "mainEntityOfPage": canonical_url,
         }
+        if product.get("sku"):
+            product_data["sku"] = str(product["sku"])
         if image_urls:
             product_data["image"] = image_urls
         if product.get("brand_name"):
@@ -789,6 +795,37 @@ def render_product_page(product: dict | None = None) -> HTMLResponse:
         if product and image_urls
         else "ONLINE LIQUOR LAND"
     )
+    body_description = (
+        " ".join(str(product.get("description") or "").split())
+        if product
+        else ""
+    ) or (
+        f"Shop {product_name} online at ONLINE LIQUOR LAND. "
+        "View current product details and availability."
+        if product
+        else "Product details will be available when you choose a product."
+    )
+    body_price = (
+        f"NPR {float(price):,.2f}"
+        if price is not None
+        else "Price unavailable"
+    )
+    body_stock = ""
+    if product:
+        body_stock = (
+            "In stock"
+            if int(product.get("stock_quantity") or 0) > 0
+            else "Out of stock"
+        )
+    initial_image = (
+        '<img src="'
+        + escape_html(image_urls[0], quote=True)
+        + '" alt="'
+        + escape_html(image_alt, quote=True)
+        + '" fetchpriority="high">'
+        if image_urls
+        else ""
+    )
     safe_values = {
         "__PRODUCT_META_DESCRIPTION__": escape_html(meta_description, quote=True),
         "__PRODUCT_CANONICAL_URL__": escape_html(canonical_url, quote=True),
@@ -801,10 +838,39 @@ def render_product_page(product: dict | None = None) -> HTMLResponse:
         ),
         "__PRODUCT_IMAGE_ALT__": escape_html(image_alt, quote=True),
         "__PRODUCT_PRICE__": price or "",
+        "__PRODUCT_LOADING_MESSAGE__": "" if product else "Loading product...",
+        "__PRODUCT_CONTENT_CLASS__": "" if product else "hidden",
+        "__PRODUCT_INITIAL_IMAGE__": initial_image,
+        "__PRODUCT_BODY_NAME__": escape_html(product_name, quote=False),
+        "__PRODUCT_BODY_PRICE__": escape_html(body_price, quote=False),
+        "__PRODUCT_BODY_STOCK__": escape_html(body_stock, quote=False),
+        "__PRODUCT_BODY_DESCRIPTION__": escape_html(
+            body_description,
+            quote=False,
+        ),
     }
     html = (FRONTEND_DIR / "product.html").read_text(encoding="utf-8")
     for placeholder, value in safe_values.items():
         html = html.replace(placeholder, value)
+    if product:
+        html = html.replace(
+            '<div id="productLoading" class="product-page-loading">',
+            '<div id="productLoading" class="product-page-loading hidden">',
+            1,
+        )
+        initial_product_data = json.dumps(
+            product,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).replace("<", "\\u003c")
+        html = html.replace(
+            '<div id="productLoading" class="product-page-loading hidden">',
+            '<script id="initialProductData" type="application/json">'
+            + initial_product_data
+            + "</script>"
+            '<div id="productLoading" class="product-page-loading hidden">',
+            1,
+        )
     if structured_data:
         html = html.replace("</head>", structured_data + "</head>", 1)
     return HTMLResponse(content=html)

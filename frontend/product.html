@@ -91,7 +91,7 @@
     <div class="store-container">
 
       <div id="productLoading" class="product-page-loading">
-        Loading product...
+        __PRODUCT_LOADING_MESSAGE__
       </div>
 
 
@@ -112,7 +112,7 @@
       </div>
 
 
-      <div id="productContent" class="product-detail hidden">
+      <div id="productContent" class="product-detail __PRODUCT_CONTENT_CLASS__">
 
         <!-- Product gallery -->
         <section class="product-gallery">
@@ -121,6 +121,7 @@
             id="productMainImage"
             class="product-main-image"
           >
+            __PRODUCT_INITIAL_IMAGE__
           </div>
 
 
@@ -137,12 +138,12 @@
         <section class="product-detail-info">
 
           <h1 id="productName">
-            Product
+            __PRODUCT_BODY_NAME__
           </h1>
 
 
           <div class="product-detail-price">
-            <span id="productPrice">NPR 0.00</span>
+            <span id="productPrice">__PRODUCT_BODY_PRICE__</span>
           </div>
 
 
@@ -150,6 +151,7 @@
             id="productStock"
             class="product-detail-stock"
           >
+            __PRODUCT_BODY_STOCK__
           </div>
 
 
@@ -158,7 +160,7 @@
             <h2>Description</h2>
 
             <p id="productDescription">
-              No description available.
+              __PRODUCT_BODY_DESCRIPTION__
             </p>
 
           </div>
@@ -627,6 +629,7 @@ function renderProduct(product) {
     "@type": "Product",
     name: product.name,
     description: productDescriptionText,
+    sku: product.sku || undefined,
     url: canonicalUrl,
     mainEntityOfPage: canonicalUrl,
     image: productImages.length ? productImages : undefined,
@@ -861,13 +864,19 @@ async function loadProduct() {
 
   try {
 
+    const initialProductData =
+      document.getElementById("initialProductData");
+    if (initialProductData?.textContent.trim()) {
+      renderProduct(JSON.parse(initialProductData.textContent));
+      return;
+    }
+
     const response =
       await fetch(
         slug
           ? `${API_BASE}/api/products/by-slug/${encodeURIComponent(slug)}`
           : `${API_BASE}/api/products/${encodeURIComponent(productId)}`
       );
-
 
     if (!response.ok) {
 

@@ -5,26 +5,60 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <meta name="facebook-domain-verification" content="zbwlh4v479suupzkuycfn9lmi7a0d4" />
-  <meta name="description" content="Shop wines, spirits, and favorites online at ONLINE LIQUOR LAND. Browse a curated selection and enjoy convenient ordering and delivery.">
+  <meta name="description" content="Shop wine, spirits, and more from ONLINE LIQUOR LAND, an online liquor store in Nepal. Browse products, check availability, and order online.">
   <meta name="robots" content="index,follow">
   <link rel="canonical" href="https://onlineliquorland.com/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="ONLINE LIQUOR LAND">
-  <meta property="og:title" content="ONLINE LIQUOR LAND | Premium Liquor Store">
-  <meta property="og:description" content="Explore wines, spirits, and favorites with convenient online ordering from ONLINE LIQUOR LAND.">
+  <meta property="og:title" content="Online Liquor Store in Nepal | ONLINE LIQUOR LAND">
+  <meta property="og:description" content="Shop wine, spirits, and more from ONLINE LIQUOR LAND, an online liquor store in Nepal. Browse products, check availability, and order online.">
   <meta property="og:url" content="https://onlineliquorland.com/">
   <meta name="twitter:card" content="summary">
-  <title>ONLINE LIQUOR LAND | Online Liquor Store in Nepal</title>
+  <meta name="twitter:title" content="Online Liquor Store in Nepal | ONLINE LIQUOR LAND">
+  <meta name="twitter:description" content="Shop wine, spirits, and more from ONLINE LIQUOR LAND, an online liquor store in Nepal. Browse products, check availability, and order online.">
+  <title>Online Liquor Store in Nepal | ONLINE LIQUOR LAND</title>
   <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="shortcut icon" href="/favicon.ico">
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "OnlineStore",
-      "name": "ONLINE LIQUOR LAND",
-      "url": "https://onlineliquorland.com/",
-      "description": "Online store for wines, spirits, and favorites with convenient ordering and delivery."
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://onlineliquorland.com/#organization",
+          "name": "Maharjan Store",
+          "alternateName": "ONLINE LIQUOR LAND",
+          "url": "https://onlineliquorland.com/"
+        },
+        {
+          "@type": "OnlineStore",
+          "@id": "https://onlineliquorland.com/#store",
+          "name": "ONLINE LIQUOR LAND",
+          "url": "https://onlineliquorland.com/",
+          "description": "Online liquor store in Nepal offering wine, spirits, and more.",
+          "parentOrganization": {
+            "@id": "https://onlineliquorland.com/#organization"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://onlineliquorland.com/#website",
+          "url": "https://onlineliquorland.com/",
+          "name": "ONLINE LIQUOR LAND",
+          "publisher": {
+            "@id": "https://onlineliquorland.com/#organization"
+          },
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": {
+              "@type": "EntryPoint",
+              "urlTemplate": "https://onlineliquorland.com/shop?search={search_term_string}"
+            },
+            "query-input": "required name=search_term_string"
+          }
+        }
+      ]
     }
   </script>
 
