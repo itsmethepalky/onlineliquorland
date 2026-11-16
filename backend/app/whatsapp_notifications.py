@@ -98,6 +98,45 @@ def _notification_messages(
     return messages
 
 
+def _template_parameters(
+    order: dict,
+    customer: dict,
+    items: list[dict],
+) -> list[str]:
+    total = Decimal(str(order.get("total_amount") or 0))
+    paid = Decimal(str(order.get("amount_paid") or 0))
+    remaining = max(total - paid, Decimal("0"))
+    payment_label = "PAID" if remaining == 0 else "PARTIALLY PAID"
+
+    product_names = []
+    quantities = []
+    for item in items:
+        product = item.get("product") or {}
+        product_names.append(
+            _clean_text(product.get("name"))
+            or f"Product {item.get('product_id') or ''}".strip()
+        )
+        quantities.append(str(int(item.get("quantity") or 0)))
+
+    latitude = order.get("delivery_latitude")
+    longitude = order.get("delivery_longitude")
+    return [
+        _clean_text(order.get("order_no") or order.get("id")),
+        _clean_text(customer.get("name")) or "Unknown",
+        _clean_text(order.get("phone") or customer.get("phone"))
+        or "Not provided",
+        ", ".join(product_names) or "Not provided",
+        ", ".join(quantities) or "0",
+        f"NPR {_money(total)}",
+        payment_label,
+        f"NPR {_money(paid)}",
+        f"NPR {_money(remaining)}",
+        _clean_text(order.get("shipping_address")) or "Not provided",
+        str(latitude) if latitude is not None else "Not available",
+        str(longitude) if longitude is not None else "Not available",
+    ]
+
+
 def _load_order_details(order_id: int) -> tuple[dict, dict, list[dict]]:
     order_response = (
         supabase_admin
@@ -158,7 +197,10 @@ def _load_order_details(order_id: int) -> tuple[dict, dict, list[dict]]:
     return order, customer, items
 
 
-def _send_cloud_api_message(message: str) -> None:
+def _send_cloud_api_message(
+    message: str,
+    template_parameters: list[str] | None = None,
+) -> None:
     token = settings.WHATSAPP_CLOUD_API_TOKEN.strip()
     phone_number_id = settings.WHATSAPP_PHONE_NUMBER_ID.strip()
     version = settings.WHATSAPP_GRAPH_API_VERSION.strip()
@@ -171,6 +213,10 @@ def _send_cloud_api_message(message: str) -> None:
 
     template_name = settings.WHATSAPP_TEMPLATE_NAME.strip()
     if template_name:
+        if template_parameters is None or len(template_parameters) != 12:
+            raise RuntimeError(
+                "WhatsApp order template requires exactly 12 parameters."
+            )
         payload = {
             "messaging_product": "whatsapp",
             "to": recipient,
@@ -186,8 +232,9 @@ def _send_cloud_api_message(message: str) -> None:
                         "parameters": [
                             {
                                 "type": "text",
-                                "text": message,
+                                "text": parameter,
                             }
+                            for parameter in template_parameters
                         ],
                     }
                 ],
@@ -242,14 +289,18 @@ def notify_admin_new_fonepay_order(
 
         order, customer, items = _load_order_details(order_id)
         template_name = settings.WHATSAPP_TEMPLATE_NAME.strip()
-        message_limit = 900 if template_name else WHATSAPP_MESSAGE_LIMIT
-        for message in _notification_messages(
-            order,
-            customer,
-            items,
-            message_limit=message_limit,
-        ):
-            _send_cloud_api_message(message)
+        if template_name:
+            _send_cloud_api_message(
+                "",
+                template_parameters=_template_parameters(
+                    order,
+                    customer,
+                    items,
+                ),
+            )
+        else:
+            for message in _notification_messages(order, customer, items):
+                _send_cloud_api_message(message)
 
         sent_response = supabase_admin.rpc(
             "mark_fonepay_whatsapp_notification_sent",

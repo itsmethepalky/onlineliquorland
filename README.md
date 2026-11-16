@@ -46,7 +46,12 @@ different road data and routing rules from Google Maps, so route distances may
 still differ.
 The checkout price is the admin-set base fare plus NPR 50 per route kilometer.
 Free-delivery promotions continue to waive the delivery fee. Orders cannot be
-placed until route pricing succeeds.
+placed until route pricing succeeds. Online checkout requires a merchandise
+subtotal of at least NPR 900 after discounts and before delivery. Delivery is
+restricted to locations within a 9 km straight-line radius from the configured
+store origin. Both restrictions are checked by the backend and shown during
+checkout; customers who cannot meet either requirement can contact the store
+using the checkout WhatsApp order button.
 
 Configure these backend environment variables:
 
@@ -223,10 +228,41 @@ Apply migration 022, then configure `WHATSAPP_CLOUD_API_TOKEN`,
 environment. Keep the token secret; never put it in frontend code or commit it.
 The recipient must have opted in. Free-form text messages require an open
 WhatsApp customer-service window with the business. To notify outside that
-window, create an approved Meta template with one body text parameter and set
-`WHATSAPP_TEMPLATE_NAME` and `WHATSAPP_TEMPLATE_LANGUAGE`; the order details
-are sent as that parameter in messages kept below the template parameter size
-limit.
+window, create and get approval for a Utility template named `order_alert` in
+English (`en`), and set `WHATSAPP_TEMPLATE_NAME` and
+`WHATSAPP_TEMPLATE_LANGUAGE` to match. Its body must use these twelve
+parameters in order:
+
+```text
+?? NEW WEBSITE ORDER RECEIVED!
+
+?? Order ID: {{1}}
+
+?? Customer Name: {{2}}
+
+?? Customer Phone: {{3}}
+
+??? Product: {{4}}
+
+?? Quantity: {{5}}
+
+?? Total Order Amount: {{6}}
+
+?? PAYMENT DETAILS Payment Status: {{7}} Amount Paid: {{8}} Remaining Balance: {{9}}
+
+?? Delivery Address: {{10}} Latitude: {{11}} Longitude: {{12}}
+
+????????????????
+
+Please check your website admin dashboard to view and manage this order.
+
+Thank you!
+```
+
+The backend sends one text value for each numbered placeholder, in the same
+order. Multiple products and their quantities are comma-separated in
+parameters 4 and 5. If the template name is blank, the backend sends the
+existing free-form text notification instead.
 
 ## Auth-page Cloudflare Turnstile
 

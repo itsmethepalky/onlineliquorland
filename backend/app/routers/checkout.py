@@ -34,6 +34,7 @@ FONEPAY_VERIFY_URL = settings.FONEPAY_VERIFY_URL
 FONEPAY_MIN_INITIAL_PAYMENT = Decimal(
     settings.MINIMUM_INITIAL_PAYMENT or "300"
 )
+MINIMUM_ORDER_AMOUNT = Decimal("900")
 MAX_DELIVERY_DISTANCE_KM = Decimal("9")
 EARTH_RADIUS_KM = 6371.0088
 
@@ -422,6 +423,7 @@ def pending_checkout(
     if not pending:
         return {"pending": False}
 
+    _ensure_minimum_order_amount(pending["order"])
     result = _pending_order_response(pending)
     return {
         "pending": True,
@@ -451,6 +453,20 @@ def _checkout_migration_missing(exc: Exception) -> str | None:
 
 def _format_decimal(value: Decimal | str | float | int) -> str:
     return format(Decimal(str(value)), "f")
+
+
+def _ensure_minimum_order_amount(pricing: dict) -> None:
+    subtotal = Decimal(str(pricing.get("subtotal") or 0))
+    discount = Decimal(str(pricing.get("discount") or 0))
+    order_value = max(subtotal - discount, Decimal("0"))
+    if order_value < MINIMUM_ORDER_AMOUNT:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Minimum order value is NPR 900 after discounts and before "
+                "delivery. Add more items or contact us on WhatsApp to order."
+            ),
+        )
 
 
 def _fonepay_signature(payload: dict) -> str:
@@ -878,6 +894,7 @@ def preview_checkout(
         )
 
     result = response.data[0]
+    _ensure_minimum_order_amount(result)
 
     return {
         "subtotal": result.get("subtotal", 0),
@@ -946,6 +963,7 @@ def create_checkout_order(
     )
     if pending:
         order = pending["order"]
+        _ensure_minimum_order_amount(order)
         total_amount = Decimal(str(order["total_amount"]))
         outstanding_amount = (
             total_amount - Decimal(str(order.get("amount_paid") or 0))
@@ -1079,6 +1097,7 @@ def create_checkout_order(
         )
 
     result = response.data[0]
+    _ensure_minimum_order_amount(result)
     total_amount = Decimal(str(result["total_amount"]))
 
     if total_amount <= 0:

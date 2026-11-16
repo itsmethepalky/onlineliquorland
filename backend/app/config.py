@@ -146,7 +146,7 @@ class Settings:
     )
     WHATSAPP_TEMPLATE_NAME: str = os.getenv(
         "WHATSAPP_TEMPLATE_NAME",
-        "",
+        "order_alert",
     )
     WHATSAPP_TEMPLATE_LANGUAGE: str = os.getenv(
         "WHATSAPP_TEMPLATE_LANGUAGE",

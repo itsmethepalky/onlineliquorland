@@ -524,7 +524,6 @@
 
           </div>
 
-
           <p class="checkout-security-note">
             Final price and stock are verified securely
             by ONLINE LIQUOR LAND before your order is created.
@@ -535,6 +534,42 @@
       </aside>
 
     </div>
+
+    <aside
+      id="checkoutPolicyBanner"
+      class="checkout-policy-banner hidden"
+      aria-labelledby="checkoutPolicyTitle"
+    >
+      <h2 id="checkoutPolicyTitle">
+        <i class="bi bi-info-circle" aria-hidden="true"></i>
+        Order &amp; delivery info
+      </h2>
+      <ul class="checkout-policy-rules">
+        <li>
+          <strong>Minimum order:</strong> NPR 900 after discounts, before delivery.
+        </li>
+        <li>
+          <strong>Delivery area:</strong> Within 9 km of the store.
+        </li>
+      </ul>
+      <p
+        id="checkoutPolicyMessage"
+        class="checkout-policy-status hidden"
+        role="alert"
+        aria-live="assertive"
+      ></p>
+      <a
+        id="checkoutWhatsAppLink"
+        class="whatsapp-order-button whatsapp-order-link"
+        data-phone="9779851144738"
+        href="https://wa.me/9779851144738"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <i class="bi bi-whatsapp" aria-hidden="true"></i>
+        Order via WhatsApp
+      </a>
+    </aside>
 
 
   </div>
@@ -609,6 +644,12 @@ const checkoutDelivery =
 
 const checkoutTotal =
   document.getElementById("checkoutTotal");
+
+const checkoutPolicyBanner =
+  document.getElementById("checkoutPolicyBanner");
+
+const checkoutPolicyMessage =
+  document.getElementById("checkoutPolicyMessage");
 
 const checkoutError =
   document.getElementById("checkoutError");
@@ -854,8 +895,30 @@ function clearDeliveryQuote() {
   }
 }
 
+function updateCheckoutPolicyBanner(message = "") {
+  const restriction = String(message || "");
+  const isMinimumOrder =
+    restriction.toLowerCase().includes("minimum order value");
+  const isOutsideDeliveryArea =
+    restriction.toLowerCase().includes("9 km radius");
+
+  if (!isMinimumOrder && !isOutsideDeliveryArea) {
+    checkoutPolicyBanner.classList.add("hidden");
+    checkoutPolicyMessage.textContent = "";
+    checkoutPolicyMessage.classList.add("hidden");
+    return;
+  }
+
+  checkoutPolicyBanner.classList.remove("hidden");
+  checkoutPolicyMessage.textContent = isMinimumOrder
+    ? "Your order is below the NPR 900 minimum. Add more items or contact us on WhatsApp to order."
+    : "This address is outside the 9 km delivery area. Contact us on WhatsApp for help.";
+  checkoutPolicyMessage.classList.remove("hidden");
+}
+
 async function previewCheckoutPricing() {
   const cart = getCart();
+  updateCheckoutPolicyBanner();
 
   if (!cart.length) {
     deliveryPricingValid = false;
@@ -961,6 +1024,7 @@ async function previewCheckoutPricing() {
 
     deliveryPricingValid = true;
     placeOrderButton.disabled = false;
+    updateCheckoutPolicyBanner();
     deliveryLocationMessage.textContent =
       `Walking route: ${Number(data.delivery_distance_km).toFixed(3)} km. Delivery includes the base fare plus NPR 50 per kilometer.`;
 
@@ -1022,6 +1086,7 @@ async function previewCheckoutPricing() {
     clearDeliveryQuote();
     deliveryLocationMessage.textContent =
       error.message || "Unable to calculate the delivery route.";
+    updateCheckoutPolicyBanner(error.message);
 
     if (applyPromoButton) {
       applyPromoButton.disabled = false;
@@ -1606,6 +1671,7 @@ function showCheckoutError(message) {
   checkoutError.classList.remove(
     "hidden"
   );
+  updateCheckoutPolicyBanner(message);
 
 }
 
@@ -2175,5 +2241,6 @@ initialize();
 </script>
 
 <script src="/js/role-nav.js"></script>
+<script src="/js/whatsapp-order.js"></script>
 </body>
 </html>
