@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from xml.sax.saxutils import escape
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from datetime import datetime, timezone
@@ -100,6 +100,15 @@ def _maintenance_page(message):
 
 class CustomerPhoneUpdate(BaseModel):
     phone: str = Field(min_length=7, max_length=30)
+
+
+class CustomerPushTokenUpdate(BaseModel):
+    token: str = Field(min_length=1, max_length=4096)
+    device_id: str = Field(min_length=1, max_length=100)
+
+
+class CustomerPushTokenDelete(BaseModel):
+    device_id: str = Field(min_length=1, max_length=100)
 
 
 app = FastAPI(
@@ -395,6 +404,59 @@ def account_me(
         "profile": current["profile"],
         "customer": current["customer"],
     }
+
+
+@app.post("/api/account/push-token", status_code=204)
+def register_customer_push_token(
+    payload: CustomerPushTokenUpdate,
+    current=Depends(get_current_customer),
+):
+    try:
+        supabase_admin.table("customer_push_tokens").upsert(
+            {
+                "device_id": payload.device_id,
+                "user_id": current["profile"]["id"],
+                "token": payload.token,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            on_conflict="device_id",
+        ).execute()
+    except Exception as exc:
+        print(
+            "CUSTOMER PUSH TOKEN REGISTRATION ERROR:",
+            type(exc).__name__,
+            flush=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Could not register this device for order updates.",
+        )
+
+
+@app.post("/api/account/push-token/remove", status_code=204)
+def remove_customer_push_token(
+    payload: CustomerPushTokenDelete,
+    current=Depends(get_current_customer),
+):
+    try:
+        (
+            supabase_admin
+            .table("customer_push_tokens")
+            .delete()
+            .eq("device_id", payload.device_id)
+            .eq("user_id", current["profile"]["id"])
+            .execute()
+        )
+    except Exception as exc:
+        print(
+            "CUSTOMER PUSH TOKEN REMOVAL ERROR:",
+            type(exc).__name__,
+            flush=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Could not remove this device's order notifications.",
+        ) from exc
 
 
 @app.put("/api/account/phone")

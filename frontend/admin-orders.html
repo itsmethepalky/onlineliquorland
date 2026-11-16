@@ -45,6 +45,12 @@
   </div>
 
   <div id="adminError" class="notice error hidden"></div>
+  <div
+    id="adminSuccess"
+    class="notice hidden"
+    style="background:var(--success-bg);color:var(--green-dark)"
+    role="status"
+  ></div>
 
   <section class="admin-toolbar">
     <div class="admin-search">
@@ -249,6 +255,13 @@ document.getElementById("refreshButton")
 
 const params = new URLSearchParams(window.location.search);
 const initialStatus = params.get("status");
+
+if (params.get("cancelled") === "1") {
+  const notice = document.getElementById("adminSuccess");
+  notice.textContent =
+    "Order cancelled, stock restored, and the order deleted.";
+  notice.classList.remove("hidden");
+}
 
 if (initialStatus) {
   document.getElementById("statusFilter").value = initialStatus;

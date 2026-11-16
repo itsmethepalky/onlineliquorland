@@ -4,12 +4,13 @@ import hashlib
 from typing import Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Optional
 
 from ..auth import get_current_user
 from ..config import settings
+from ..customer_notifications import notify_customer_order_status
 from ..maintenance import (
     get_maintenance_status,
     invalidate_maintenance_schedules_cache,
@@ -620,6 +621,7 @@ def get_order(
 def update_order_status(
     order_id: int,
     payload: OrderStatusUpdate,
+    background_tasks: BackgroundTasks,
     admin=Depends(get_staff_or_admin_user),
 ):
     new_status = payload.status.strip().lower()
@@ -643,6 +645,26 @@ def update_order_status(
     # must restore inventory, reverse outstanding credit,
     # and synchronize the linked POS sale.
     if new_status == "cancelled":
+        notification_customer_id = None
+        notification_order_no = None
+        try:
+            order_result = execute_read_with_retry(
+                supabase_admin
+                .table("orders")
+                .select("customer_id,order_no")
+                .eq("id", order_id)
+                .maybe_single()
+            )
+            if order_result.data:
+                notification_customer_id = order_result.data["customer_id"]
+                notification_order_no = order_result.data["order_no"]
+        except Exception as exc:
+            print(
+                "ADMIN ORDER CANCELLATION NOTIFICATION LOOKUP ERROR:",
+                repr(exc),
+                flush=True,
+            )
+
         try:
             result = supabase_admin.rpc(
                 "cancel_store_order",
@@ -667,6 +689,13 @@ def update_order_status(
             )
 
         cancelled = result.data[0]
+        background_tasks.add_task(
+            notify_customer_order_status,
+            order_id,
+            "cancelled",
+            notification_customer_id,
+            notification_order_no,
+        )
 
         return {
             "id": cancelled["order_id"],
@@ -723,7 +752,13 @@ def update_order_status(
             detail="Order not found",
         )
 
-    return result.data[0]
+    updated_order = result.data[0]
+    background_tasks.add_task(
+        notify_customer_order_status,
+        order_id,
+        new_status,
+    )
+    return updated_order
 
 
 @router.patch("/orders/{order_id}/payment-status")

@@ -90,6 +90,9 @@ then apply these checkout migrations in this order:
 18. `database/migrations/028_admin_fcm_tokens.sql`
 19. `database/migrations/029_admin_web_push.sql`
 20. `database/migrations/030_realtime_product_stock.sql`
+21. `database/migrations/031_delete_cancelled_store_orders.sql`
+22. `database/migrations/032_customer_fcm_tokens.sql`
+23. `database/migrations/033_harden_profile_privileges.sql`
 
 The checkout migrations define the seven-argument checkout function; the
 server-side promotions migration also drops the obsolete six-argument version.
@@ -126,6 +129,31 @@ Migration 030 publishes only product ID, stock quantity, and active status to
 Supabase Realtime for the storefront. Checkout already locks product rows and
 checks/decrements inventory in one transaction, so concurrent checkouts cannot
 sell more than the available stock.
+
+Migration 031 replaces the order-cancellation RPC. It restores ordered stock
+and applies existing credit, promotion, and linked POS-sale cancellation
+effects before deleting the order. The cancellation transaction is atomic;
+order items and checkout deduplication rows cascade, while linked POS sales are
+retained and unlinked. Unpaid Fonepay QR attempts are removed; paid QR records
+are retained without an order link for audit. This migration does not issue
+payment refunds. Deploy the updated
+`supabase/functions/notify-customer-order-status` Edge Function alongside the
+backend so cancellation push notifications can use the order details captured
+before deletion.
+
+Migration 033 prevents public signup metadata from assigning privileged
+application roles and limits authenticated profile updates to name and phone.
+After applying it, audit existing `admin` and `staff` profiles against the
+trusted staff roster and disable or downgrade any unauthorized accounts; the
+migration does not automatically alter existing staff assignments. Review
+privileged profiles with:
+
+```sql
+SELECT id, email, role, is_active
+FROM public.profiles
+WHERE role IN ('admin', 'staff')
+ORDER BY role, email;
+```
 
 Migrations 015–017 are designed to be rerunnable and do not intentionally drop
 functions, tables, or stored data. Migration 015 validates its checkout and
@@ -199,6 +227,15 @@ Deployment:
 5. Serve the website over HTTPS, sign in as an active admin, and enable alerts
    under **Admin → Account** on each browser that should receive them.
 
+Customer order-status push notifications use the same Firebase service-account
+secret. Apply migration 032, deploy the backend, and run
+`supabase functions deploy notify-customer-order-status` after updating that
+Edge Function. Keep `verify_jwt = true` for this function in
+`supabase/config.toml`. Customers can opt in or out from **My Account**;
+clicking a status notification opens that order and requires the customer to
+sign in if needed. Cancellation notifications include the order details
+captured before migration 031 deletes the cancelled order.
+
 The backend uses its existing service-role key to invoke the Function after
 creating an order. Never put service credentials in frontend code or commit
 them.
@@ -234,25 +271,25 @@ English (`en`), and set `WHATSAPP_TEMPLATE_NAME` and
 parameters in order:
 
 ```text
-?? NEW WEBSITE ORDER RECEIVED!
+🛒 NEW WEBSITE ORDER RECEIVED!
 
-?? Order ID: {{1}}
+📦 Order ID: {{1}}
 
-?? Customer Name: {{2}}
+👤 Customer Name: {{2}}
 
-?? Customer Phone: {{3}}
+📞 Customer Phone: {{3}}
 
-??? Product: {{4}}
+🛍️ Product: {{4}}
 
-?? Quantity: {{5}}
+🔢 Quantity: {{5}}
 
-?? Total Order Amount: {{6}}
+💰 Total Order Amount: {{6}}
 
-?? PAYMENT DETAILS Payment Status: {{7}} Amount Paid: {{8}} Remaining Balance: {{9}}
+💳 PAYMENT DETAILS Payment Status: {{7}} Amount Paid: {{8}} Remaining Balance: {{9}}
 
-?? Delivery Address: {{10}} Latitude: {{11}} Longitude: {{12}}
+📍 Delivery Address: {{10}} Latitude: {{11}} Longitude: {{12}}
 
-????????????????
+━━━━━━━━━━━━━━━━
 
 Please check your website admin dashboard to view and manage this order.
 

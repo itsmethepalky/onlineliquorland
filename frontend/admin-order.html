@@ -564,6 +564,11 @@ async function saveOrderStatus() {
       }
     );
 
+    if (status === "cancelled") {
+      window.location.assign("/admin/orders?cancelled=1");
+      return;
+    }
+
     if (orderData && orderData.order) {
       orderData.order.status =
         updated.status || status;

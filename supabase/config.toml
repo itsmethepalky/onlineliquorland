@@ -1,2 +1,5 @@
 [functions.notify-admin-new-order]
 verify_jwt = true
+
+[functions.notify-customer-order-status]
+verify_jwt = true

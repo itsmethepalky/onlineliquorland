@@ -14,6 +14,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js"></script>
   <script src="js/auth-guard.js"></script>
+  <script src="/js/customer-push.js"></script>
 </head>
 
 <body>
@@ -152,6 +153,25 @@
       </div>
       <small id="accountPhoneMessage" class="account-phone-message" aria-live="polite"></small>
     </form>
+
+    <section class="account-phone-form" aria-labelledby="customerPushHeading">
+      <h2 id="customerPushHeading">Order status notifications</h2>
+      <p class="muted">
+        Get updates on this browser when your order status changes.
+      </p>
+      <p id="customerPushStatus" aria-live="polite">
+        Push notifications are not enabled on this browser.
+      </p>
+      <div class="account-phone-controls">
+        <button id="enableCustomerPush" class="store-button primary" type="button">
+          Enable order updates
+        </button>
+        <button id="disableCustomerPush" class="store-button secondary hidden" type="button">
+          Disable order updates
+        </button>
+      </div>
+      <small id="customerPushMessage" class="account-phone-message" role="status"></small>
+    </section>
 
     <div class="account-actions-grid">
 
@@ -364,6 +384,9 @@ async function loadAccount() {
 
     accountDetails.classList.remove("hidden");
     customerOnlyMessage.classList.add("hidden");
+    if (profile.id && typeof window.initializeCustomerPush === "function") {
+      void window.initializeCustomerPush(profile.id);
+    }
 
   } catch (error) {
 
