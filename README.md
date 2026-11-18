@@ -93,6 +93,7 @@ then apply these checkout migrations in this order:
 21. `database/migrations/031_delete_cancelled_store_orders.sql`
 22. `database/migrations/032_customer_fcm_tokens.sql`
 23. `database/migrations/033_harden_profile_privileges.sql`
+24. `database/migrations/034_fonepay_whatsapp_delivery_tracking.sql`
 
 The checkout migrations define the seven-argument checkout function; the
 server-side promotions migration also drops the obsolete six-argument version.
@@ -363,11 +364,17 @@ with the Meta app secret. Incoming messages and message status changes
 `whatsapp_webhook_events`. Event keys are unique, so retried deliveries do not
 create duplicate rows. Payloads are limited in size, and the event table is
 restricted to the backend service role by RLS and SQL grants.
+Outbound order alerts record each Meta message ID in
+`fonepay_order_whatsapp_messages`; webhook status updates then record the latest
+sent, delivered, read, or failed state alongside it. The notification table's
+`sent_at` means the API accepted the send request, not that the recipient
+received the message.
 
 On an existing Supabase database, apply
-`database/migrations/023_whatsapp_webhook_events.sql` before deploying the
-webhook code. Configure these values in the Render backend environment, never
-in frontend code or Git:
+`database/migrations/023_whatsapp_webhook_events.sql` and then
+`database/migrations/034_fonepay_whatsapp_delivery_tracking.sql` before
+deploying the webhook and outbound notification code. Configure these values
+in the Render backend environment, never in frontend code or Git:
 
 - `WHATSAPP_APP_SECRET`: App Secret from Meta App settings. Used only to verify
   signed webhook POSTs.

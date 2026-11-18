@@ -34,4 +34,4 @@ ALTER TABLE public.whatsapp_webhook_events ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.whatsapp_webhook_events
     FROM PUBLIC, anon, authenticated;
 
-GRANT INSERT ON TABLE public.whatsapp_webhook_events TO service_role;
+GRANT SELECT, INSERT ON TABLE public.whatsapp_webhook_events TO service_role;

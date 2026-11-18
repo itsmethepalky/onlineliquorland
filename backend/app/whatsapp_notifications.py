@@ -200,7 +200,7 @@ def _load_order_details(order_id: int) -> tuple[dict, dict, list[dict]]:
 def _send_cloud_api_message(
     message: str,
     template_parameters: list[str] | None = None,
-) -> None:
+) -> str:
     token = settings.WHATSAPP_CLOUD_API_TOKEN.strip()
     phone_number_id = settings.WHATSAPP_PHONE_NUMBER_ID.strip()
     version = settings.WHATSAPP_GRAPH_API_VERSION.strip()
@@ -261,6 +261,30 @@ def _send_cloud_api_message(
         raise RuntimeError(
             f"WhatsApp Cloud API rejected a message (HTTP {response.status_code})."
         )
+    try:
+        response_data = response.json()
+    except ValueError as exc:
+        raise RuntimeError(
+            "WhatsApp Cloud API returned an invalid response."
+        ) from exc
+
+    messages = (
+        response_data.get("messages")
+        if isinstance(response_data, dict)
+        else None
+    )
+    message_id = (
+        messages[0].get("id")
+        if isinstance(messages, list)
+        and messages
+        and isinstance(messages[0], dict)
+        else None
+    )
+    if not isinstance(message_id, str) or not message_id:
+        raise RuntimeError(
+            "WhatsApp Cloud API response did not contain a message ID."
+        )
+    return message_id
 
 
 def notify_admin_new_fonepay_order(
@@ -290,17 +314,38 @@ def notify_admin_new_fonepay_order(
         order, customer, items = _load_order_details(order_id)
         template_name = settings.WHATSAPP_TEMPLATE_NAME.strip()
         if template_name:
-            _send_cloud_api_message(
-                "",
-                template_parameters=_template_parameters(
-                    order,
-                    customer,
-                    items,
-                ),
-            )
+            messages = [
+                (
+                    "",
+                    _template_parameters(
+                        order,
+                        customer,
+                        items,
+                    ),
+                )
+            ]
         else:
-            for message in _notification_messages(order, customer, items):
-                _send_cloud_api_message(message)
+            messages = [
+                (message, None)
+                for message in _notification_messages(order, customer, items)
+            ]
+
+        for message, template_parameters in messages:
+            message_id = _send_cloud_api_message(
+                message,
+                template_parameters=template_parameters,
+            )
+            recorded_response = supabase_admin.rpc(
+                "record_fonepay_whatsapp_message",
+                {
+                    "p_transaction_id": transaction_id,
+                    "p_message_id": message_id,
+                },
+            ).execute()
+            if not recorded_response.data:
+                raise RuntimeError(
+                    "Could not associate WhatsApp message with the order."
+                )
 
         sent_response = supabase_admin.rpc(
             "mark_fonepay_whatsapp_notification_sent",
